@@ -1,0 +1,29 @@
+[
+  {
+    "case_name": "case2",
+    "security_target": 128,
+    "max_g_value": 4,
+    "partition_num": 42,
+    "window_radius": 1,
+    "block_num": 133,
+    "hash_len": 266
+  },
+  {
+    "case_name": "case2",
+    "security_target": 160,
+    "max_g_value": 4,
+    "partition_num": 52,
+    "window_radius": 2,
+    "block_num": 162,
+    "hash_len": 324
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 62,
+    "window_radius": 2,
+    "block_num": 193,
+    "hash_len": 386
+  }
+]

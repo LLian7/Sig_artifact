@@ -1,0 +1,80 @@
+[
+  {
+    "case_name": "case1",
+    "security_target": 128,
+    "max_g_value": 16,
+    "partition_size": 14,
+    "window_radius": 2,
+    "block_num": 32,
+    "hash_len": 128,
+    "cycles": {
+      "keygen_mcycles": 3.1826999405390626,
+      "sign_mcycles": 1.293616940109375,
+      "verify_mcycles": 2.4985738575078127
+    },
+    "memory": {
+      "peak_mib": 0.07631939649581909
+    },
+    "signature": {
+      "sig_size_obj_cycles": 101.65703125,
+      "sig_size_obj_ops": 101.671875
+    },
+    "ops": {
+      "keygen": 668.0,
+      "sign": 137.540625,
+      "verify": 534.071875
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 160,
+    "max_g_value": 16,
+    "partition_size": 17,
+    "window_radius": 2,
+    "block_num": 40,
+    "hash_len": 160,
+    "cycles": {
+      "keygen_mcycles": 4.112316108117188,
+      "sign_mcycles": 1.711606845671875,
+      "verify_mcycles": 3.16503239084375
+    },
+    "memory": {
+      "peak_mib": 0.09535882472991944
+    },
+    "signature": {
+      "sig_size_obj_cycles": 125.16953125,
+      "sig_size_obj_ops": 124.74375
+    },
+    "ops": {
+      "keygen": 813.0,
+      "sign": 170.46875,
+      "verify": 645.4875
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 16,
+    "partition_size": 20,
+    "window_radius": 2,
+    "block_num": 48,
+    "hash_len": 192,
+    "cycles": {
+      "keygen_mcycles": 4.724248754601563,
+      "sign_mcycles": 2.0443346143359373,
+      "verify_mcycles": 3.626467231492188
+    },
+    "memory": {
+      "peak_mib": 0.11503884792327881
+    },
+    "signature": {
+      "sig_size_obj_cycles": 148.04583333333335,
+      "sig_size_obj_ops": 148.13958333333335
+    },
+    "ops": {
+      "keygen": 957.0,
+      "sign": 209.54375000000002,
+      "verify": 756.81875
+    }
+  }
+]

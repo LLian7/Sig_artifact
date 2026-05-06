@@ -1,0 +1,74 @@
+[
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 48,
+    "window_radius": 2,
+    "block_num": 96,
+    "hash_len": 192
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 8,
+    "partition_num": 24,
+    "window_radius": 3,
+    "block_num": 96,
+    "hash_len": 288
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 16,
+    "partition_num": 12,
+    "window_radius": 3,
+    "block_num": 96,
+    "hash_len": 384
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 32,
+    "partition_num": 7,
+    "window_radius": 2,
+    "block_num": 64,
+    "hash_len": 320
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 62,
+    "window_radius": 3,
+    "block_num": 192,
+    "hash_len": 384
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 8,
+    "partition_num": 26,
+    "window_radius": 6,
+    "block_num": 128,
+    "hash_len": 384
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 16,
+    "partition_num": 12,
+    "window_radius": 3,
+    "block_num": 96,
+    "hash_len": 384
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 32,
+    "partition_num": 7,
+    "window_radius": 2,
+    "block_num": 77,
+    "hash_len": 385
+  }
+]

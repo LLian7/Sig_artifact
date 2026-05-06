@@ -1,0 +1,253 @@
+Artifact Evaluation Notes
+=========================
+
+Repository scope
+----------------
+This directory contains the implementation, parameter-search code, benchmark code,
+cached benchmark outputs, and unit tests for the YCSig / ValStrictISP artifact.
+
+The section mapping below is intended to help artifact evaluators connect the
+paper claims to the code. The section names follow the current manuscript
+organization used in this repository:
+- construction / scheme description
+- complexity analysis
+- comparison
+- implementation / other benchmarks
+
+
+1. Paper-to-code mapping
+------------------------
+
+1.1 Core construction: YCSig
+- yc_sig.py
+  Main implementation of the YCSig one-time signature scheme.
+  Includes setup, key generation, signing, verification, retry handling, and
+  the mapping from accepted ValStrictISP outputs to signed leaf indices.
+- crypto_utils.py
+  Hash/XOF helper functions used across the construction.
+- keyed_hash.py
+  Keyed hash wrapper used by the construction.
+- tweakable_hash.py
+  Tweakable hash helper used in ADS / Merkle-related parts.
+- merkle_tree.py
+  Merkle tree implementation used for public-key compression and authentication.
+- pprf.py
+  PPRF implementation used for punctured secret derivation.
+- operation_counter.py
+  Lightweight operation counter used by the benchmark code.
+
+1.2 Core algorithm: ValStrictISP
+- val_strict_isp.py
+  Main implementation of the simplified-windowed ValStrictISP algorithm.
+  Includes:
+  - parameter class ISPParameters
+  - window bounds / feasibility guard
+  - sampling / deterministic XOF-driven subset generation
+  - the public val_strict_isp(...) interface
+
+1.3 Complexity analysis and parameter search
+- search_ycsig_sigsize.py
+  Exact search for admissible (HashLen, MaxGValue, PartitionNum, WindowRadius)
+  rows under retry/UCR constraints.
+  This script is the code counterpart for the paper's complexity-analysis and
+  parameter-selection sections.
+- params_windowed_comparison_current.json
+- params_windowed_comparison_128_160.json
+- params_windowed_comparison_128_160_verify_tiebreak.json
+- params_windowed_implementation_192_current.json
+  Cached parameter selections used for comparison / implementation tables.
+
+1.4 Comparison section
+- benchmark_ycsig.py
+  Shared analytic/empirical benchmark driver for YCSig.
+- benchmark_ycsig_ops.py
+  Operation-count benchmark (hash-equivalent accounting).
+- benchmark_ycsig_table.py
+  Encodes the paper rows used by the benchmark-table helpers.
+- benchmark_ycsig_table_comparison.py
+  Recomputes the YCSig rows used in the comparison table from implementation
+  counters and supports JSON/text output.
+
+1.5 Implementation / Other Benchmarks section
+- benchmark_ycsig_cycles.py
+  Cycle benchmark driver; supports retry/sign/verify timing and optional
+  tracemalloc-based peak-memory tracking.
+- benchmark_ycsig_table_ops.py
+  Table-oriented wrapper for operation-count benchmarks.
+- benchmark_ycsig_table_cycles.py
+  Table-oriented wrapper for cycle and memory benchmarks.
+- benchmark_ycsig_table_dual.py
+  Combined wrapper that reports both operation-count and cycle-table results.
+- implementation_results_128_160_current.json
+- implementation_results_192_current.json
+- implementation_w16_block_first_results.json
+  Cached implementation-level benchmark outputs.
+
+1.6 Contribution paragraph / high-level claims
+There is no separate executable "contribution paragraph" generator in the
+current repository. The paper-level high-level claims are supported by:
+- construction code: yc_sig.py, val_strict_isp.py
+- search code: search_ycsig_sigsize.py
+- comparison benchmark code: benchmark_ycsig_table_comparison.py
+- implementation benchmark code: benchmark_ycsig_table_ops.py,
+  benchmark_ycsig_table_cycles.py, benchmark_ycsig_table_dual.py
+
+1.7 Unit tests
+- test_yc_sig.py
+  Functional tests for YCSig.
+- test_val_strict_isp.py
+  Functional tests for ValStrictISP.
+- test_search_ycsig_sigsize.py
+  Tests for parameter-search logic.
+- test_benchmark_ycsig.py
+- test_benchmark_ycsig_ops.py
+- test_benchmark_ycsig_cycles.py
+- test_benchmark_ycsig_table.py
+- test_benchmark_ycsig_table_dual.py
+  Benchmark/helper tests.
+- test_merkle_tree.py
+- test_pprf.py
+- test_operation_counter.py
+  Supporting-module tests.
+
+
+2. Reproduction guide
+---------------------
+
+2.1 Sanity check / main correctness tests
+Run:
+python3 -m unittest test_yc_sig.py test_val_strict_isp.py
+
+2.2 Full relevant test suite used during repository maintenance
+Run:
+python3 -m unittest \
+  test_yc_sig.py \
+  test_val_strict_isp.py \
+  test_benchmark_ycsig.py \
+  test_benchmark_ycsig_ops.py \
+  test_benchmark_ycsig_cycles.py \
+  test_benchmark_ycsig_table.py \
+  test_benchmark_ycsig_table_dual.py \
+  test_search_ycsig_sigsize.py
+
+2.3 Parameter search
+Example:
+python3 search_ycsig_sigsize.py --format text
+
+JSON export:
+python3 search_ycsig_sigsize.py --format json
+
+2.4 Comparison-table recomputation
+Example:
+python3 benchmark_ycsig_table_comparison.py \
+  --repetitions 5000 \
+  --params-json params_windowed_comparison_current.json \
+  --format text
+
+2.5 Implementation benchmark recomputation
+Operation-count table:
+python3 benchmark_ycsig_table_ops.py \
+  --samples 32 \
+  --repetitions 40 \
+  --format text
+
+Cycle/memory table:
+python3 benchmark_ycsig_table_cycles.py \
+  --samples 32 \
+  --repetitions 40 \
+  --cpu-frequency-ghz 3.49 \
+  --measure-memory \
+  --format text
+
+Combined wrapper:
+python3 benchmark_ycsig_table_dual.py \
+  --samples 32 \
+  --repetitions 40 \
+  --cpu-frequency-ghz 3.49 \
+  --mode both \
+  --format text
+
+
+3. Experimental environment
+---------------------------
+
+3.1 Programming language
+- Python implementation
+- Tested with CPython 3.14.4
+
+3.2 Operating system
+- Tested on macOS 26.4.1
+- Kernel / platform string observed during maintenance:
+  Darwin 25.4.0, arm64
+
+3.3 Compiler / build environment
+- No standalone compilation step is required for the artifact itself.
+- The repository is pure Python and relies on the standard library.
+- The Python interpreter in the tested environment reports:
+  Clang 17.0.0 (clang-1700.6.4.2)
+
+3.4 Python package requirements
+- No third-party Python packages are required by the runtime code or the test
+  suite in this directory.
+- Imported dependencies are either:
+  - Python standard-library modules
+  - local repository modules in this directory
+
+3.5 Standard-library features used
+- hashlib
+- json
+- math
+- random
+- statistics
+- dataclasses
+- functools
+- typing
+- argparse
+- unittest
+- tracemalloc
+- subprocess
+- struct
+- gc
+- time
+
+3.6 Benchmark environment notes
+- Cycle benchmarks use per-thread CPU time.
+- If automatic CPU-frequency detection is unsuitable on a target machine,
+  explicitly pass:
+  --cpu-frequency-ghz <value>
+- The paper-style implementation tables in this repository were maintained with
+  3.49 GHz as the nominal CPU frequency.
+
+
+4. Anonymity and language checks
+--------------------------------
+
+4.1 Non-English / non-ASCII scan
+- All .py files in this directory were scanned for non-ASCII characters.
+- All .py/.json/.txt files in this directory were also scanned again.
+- No Chinese characters and no non-ASCII source text were found in these files.
+
+4.2 Anonymity scan
+- The repository files in this directory were scanned for obvious identifying
+  strings such as personal names, email domains, university/institute words,
+  and local-path markers.
+- No positive matches were found in the scanned .py/.json/.txt files.
+
+4.3 Scope of the scan
+- The scan covered repository files in this benchmark directory.
+- It did not modify the implementation code.
+- It is still good practice to do one final repository-wide grep before
+  submission if other directories will also be archived.
+
+
+5. Practical notes for artifact evaluators
+------------------------------------------
+- Start with test_yc_sig.py and test_val_strict_isp.py if you want the shortest
+  path to validating the core cryptographic logic.
+- Use search_ycsig_sigsize.py if you want to validate the exact parameter-search
+  claims behind the complexity section.
+- Use benchmark_ycsig_table_comparison.py for the comparison section and
+  benchmark_ycsig_table_cycles.py / benchmark_ycsig_table_ops.py for the
+  implementation section.
+- Cached JSON files are included so evaluators can inspect the currently stored
+  benchmark outputs without rerunning long experiments first.
