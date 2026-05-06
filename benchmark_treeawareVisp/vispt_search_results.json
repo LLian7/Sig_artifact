@@ -1,0 +1,456 @@
+{
+  "rows": {
+    "case1|Size|128|4": {
+      "best": {
+        "keygen": 766.0,
+        "raw_result": {
+          "breakdown": {
+            "keygen": {
+              "hash.backend_calls": 766.0,
+              "hash.backend_calls.shake_256": 766.0,
+              "merkle.internal_hash": 255.0,
+              "pprf.expand": 255.0,
+              "tweak_hash.eval": 511.0,
+              "ycsig.ots_leaf_hash": 256.0
+            },
+            "retry": {
+              "hash.backend_calls": 143.5,
+              "hash.backend_calls.shake_256": 143.5,
+              "isp.xof_instances": 2.5,
+              "isp.xof_output_bits": 360.0,
+              "isp.xof_output_bytes": 45.0,
+              "keyed_hash.eval": 141.0,
+              "ycsig.partition_attempt": 141.0
+            },
+            "sign": {
+              "hash.backend_calls": 362.5,
+              "hash.backend_calls.shake_256": 362.5,
+              "isp.xof_instances": 2.5,
+              "isp.xof_output_bits": 360.0,
+              "isp.xof_output_bytes": 45.0,
+              "keyed_hash.eval": 141.0,
+              "merkle.internal_hash": 39.0,
+              "pprf.expand": 116.0,
+              "tweak_hash.eval": 103.0,
+              "ycsig.ots_leaf_hash": 64.0,
+              "ycsig.partition_attempt": 141.0
+            },
+            "sign_core": {
+              "hash.backend_calls": 219.0,
+              "hash.backend_calls.shake_256": 219.0,
+              "merkle.internal_hash": 39.0,
+              "pprf.expand": 116.0,
+              "tweak_hash.eval": 103.0,
+              "ycsig.ots_leaf_hash": 64.0
+            },
+            "verify": {
+              "hash.backend_calls": 547.0,
+              "hash.backend_calls.shake_256": 547.0,
+              "merkle.internal_hash": 216.0,
+              "pprf.expand": 139.0,
+              "tweak_hash.eval": 408.0,
+              "ycsig.ots_leaf_hash": 192.0
+            }
+          },
+          "case": "VISPT-case1-Size-w4-k128-P64-R1-H128",
+          "operations": {
+            "keygen_backend_hash_calls": 766.0,
+            "keygen_hash_equivalents_real": 766.0,
+            "keygen_sign_relation_gap_real": 0.0,
+            "retry_attempt_count_real": 141.0,
+            "retry_attempt_hash_equivalents_real": 141.0,
+            "retry_backend_hash_calls": 143.5,
+            "retry_hash_equivalents_real": 143.5,
+            "retry_sampler_hash_equivalents_real": 2.5,
+            "retry_sampler_output_bits_real": 360.0,
+            "retry_sampler_output_bytes_real": 45.0,
+            "sign_backend_hash_calls": 362.5,
+            "sign_core_backend_hash_calls": 219.0,
+            "sign_core_hash_equivalents_real": 171.05,
+            "sign_hash_equivalents_real": 273.45,
+            "verify_backend_hash_calls": 547.0,
+            "verify_hash_equivalents_real": 547.75
+          },
+          "parameters": {
+            "hash_len": 128,
+            "max_g_bit": 2,
+            "max_g_value": 4,
+            "partition_size": 64,
+            "prf_keygen_excluded": true,
+            "repetitions": 1,
+            "samples": 2,
+            "security_parameter": 128,
+            "setup_excluded": true,
+            "total_experiments": 2,
+            "window_radius": 1
+          },
+          "signature": {
+            "avg_signature_bits": 10128.0,
+            "avg_signature_hash_equivalents_concrete": 79.125,
+            "avg_signature_hash_equivalents_object_model": 79.75
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 79.75,
+        "sign": 273.45,
+        "spec": {
+          "case_name": "case1",
+          "entropy_floor": 115,
+          "entropy_floor_tex": null,
+          "expected_retries": 102.4,
+          "goal": "Size",
+          "hash_len": 128,
+          "kappa": 130.49272286476653,
+          "max_g_value": 4,
+          "partition_num": 64,
+          "security_target": 128,
+          "size_threshold": 80,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 547.75,
+        "verify_rate": 1.0
+      },
+      "small_leaf": {
+        "keygen": 668.0,
+        "raw_result": {
+          "breakdown": {
+            "keygen": {
+              "hash.backend_calls": 668.0,
+              "hash.backend_calls.shake_256": 668.0,
+              "merkle.internal_hash": 223.0,
+              "pprf.expand": 221.0,
+              "tweak_hash.eval": 447.0,
+              "ycsig.ots_leaf_hash": 224.0
+            },
+            "retry": {
+              "hash.backend_calls": 314.5,
+              "hash.backend_calls.shake_256": 314.5,
+              "isp.xof_instances": 6.5,
+              "isp.xof_output_bits": 840.0,
+              "isp.xof_output_bytes": 105.0,
+              "keyed_hash.eval": 308.0,
+              "ycsig.partition_attempt": 308.0
+            },
+            "sign": {
+              "hash.backend_calls": 527.0,
+              "hash.backend_calls.shake_256": 527.0,
+              "isp.xof_instances": 6.5,
+              "isp.xof_output_bits": 840.0,
+              "isp.xof_output_bytes": 105.0,
+              "keyed_hash.eval": 308.0,
+              "merkle.internal_hash": 36.5,
+              "pprf.expand": 112.0,
+              "tweak_hash.eval": 100.5,
+              "ycsig.ots_leaf_hash": 64.0,
+              "ycsig.partition_attempt": 308.0
+            },
+            "sign_core": {
+              "hash.backend_calls": 212.5,
+              "hash.backend_calls.shake_256": 212.5,
+              "merkle.internal_hash": 36.5,
+              "pprf.expand": 112.0,
+              "tweak_hash.eval": 100.5,
+              "ycsig.ots_leaf_hash": 64.0
+            },
+            "verify": {
+              "hash.backend_calls": 455.5,
+              "hash.backend_calls.shake_256": 455.5,
+              "merkle.internal_hash": 186.5,
+              "pprf.expand": 109.0,
+              "tweak_hash.eval": 346.5,
+              "ycsig.ots_leaf_hash": 160.0
+            }
+          },
+          "case": "VISPT-case1-Size-w4-k128-P56-R1-H128",
+          "operations": {
+            "keygen_backend_hash_calls": 668.0,
+            "keygen_hash_equivalents_real": 668.0,
+            "keygen_sign_relation_gap_real": 0.0,
+            "retry_attempt_count_real": 308.0,
+            "retry_attempt_hash_equivalents_real": 308.0,
+            "retry_backend_hash_calls": 314.5,
+            "retry_hash_equivalents_real": 314.5,
+            "retry_sampler_hash_equivalents_real": 6.5,
+            "retry_sampler_output_bits_real": 840.0,
+            "retry_sampler_output_bytes_real": 105.0,
+            "sign_backend_hash_calls": 527.0,
+            "sign_core_backend_hash_calls": 212.5,
+            "sign_core_hash_equivalents_real": 212.5,
+            "sign_hash_equivalents_real": 527.0,
+            "verify_backend_hash_calls": 455.5,
+            "verify_hash_equivalents_real": 455.5
+          },
+          "parameters": {
+            "hash_len": 128,
+            "max_g_bit": 2,
+            "max_g_value": 4,
+            "partition_size": 56,
+            "prf_keygen_excluded": true,
+            "repetitions": 1,
+            "samples": 2,
+            "security_parameter": 128,
+            "setup_excluded": true,
+            "total_experiments": 2,
+            "window_radius": 1
+          },
+          "signature": {
+            "avg_signature_bits": 10192.0,
+            "avg_signature_hash_equivalents_concrete": 79.625,
+            "avg_signature_hash_equivalents_object_model": 78.5
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 78.5,
+        "sign": 383.16666666666663,
+        "spec": {
+          "case_name": "case1",
+          "entropy_floor": 115,
+          "entropy_floor_tex": null,
+          "expected_retries": 170.66666666666666,
+          "goal": "Size",
+          "hash_len": 128,
+          "kappa": 129.36268423056896,
+          "max_g_value": 4,
+          "partition_num": 56,
+          "security_target": 128,
+          "size_threshold": 79,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 455.5,
+        "verify_rate": 1.0
+      }
+    },
+    "case2|Size|128|4": {
+      "best": {
+        "keygen": 766.0,
+        "raw_result": {
+          "breakdown": {
+            "keygen": {
+              "hash.backend_calls": 766.0,
+              "hash.backend_calls.shake_256": 766.0,
+              "merkle.internal_hash": 255.0,
+              "pprf.expand": 255.0,
+              "tweak_hash.eval": 511.0,
+              "ycsig.ots_leaf_hash": 256.0
+            },
+            "retry": {
+              "hash.backend_calls": 225.0,
+              "hash.backend_calls.shake_256": 225.0,
+              "isp.xof_instances": 1.0,
+              "isp.xof_output_bits": 120.0,
+              "isp.xof_output_bytes": 15.0,
+              "keyed_hash.eval": 224.0,
+              "ycsig.partition_attempt": 224.0
+            },
+            "sign": {
+              "hash.backend_calls": 616.0,
+              "hash.backend_calls.shake_256": 616.0,
+              "isp.xof_instances": 1.0,
+              "isp.xof_output_bits": 120.0,
+              "isp.xof_output_bytes": 15.0,
+              "keyed_hash.eval": 224.0,
+              "merkle.internal_hash": 97.0,
+              "pprf.expand": 166.0,
+              "tweak_hash.eval": 225.0,
+              "ycsig.ots_leaf_hash": 128.0,
+              "ycsig.partition_attempt": 224.0
+            },
+            "sign_core": {
+              "hash.backend_calls": 391.0,
+              "hash.backend_calls.shake_256": 391.0,
+              "merkle.internal_hash": 97.0,
+              "pprf.expand": 166.0,
+              "tweak_hash.eval": 225.0,
+              "ycsig.ots_leaf_hash": 128.0
+            },
+            "verify": {
+              "hash.backend_calls": 375.0,
+              "hash.backend_calls.shake_256": 375.0,
+              "merkle.internal_hash": 158.0,
+              "pprf.expand": 89.0,
+              "tweak_hash.eval": 286.0,
+              "ycsig.ots_leaf_hash": 128.0
+            }
+          },
+          "case": "VISPT-case2-Size-w4-k128-P64-R1-H256",
+          "operations": {
+            "keygen_backend_hash_calls": 766.0,
+            "keygen_hash_equivalents_real": 766.0,
+            "keygen_sign_relation_gap_real": 0.0,
+            "retry_attempt_count_real": 224.0,
+            "retry_attempt_hash_equivalents_real": 224.0,
+            "retry_backend_hash_calls": 225.0,
+            "retry_hash_equivalents_real": 225.0,
+            "retry_sampler_hash_equivalents_real": 1.0,
+            "retry_sampler_output_bits_real": 120.0,
+            "retry_sampler_output_bytes_real": 15.0,
+            "sign_backend_hash_calls": 616.0,
+            "sign_core_backend_hash_calls": 391.0,
+            "sign_core_hash_equivalents_real": 389.0,
+            "sign_hash_equivalents_real": 577.3,
+            "verify_backend_hash_calls": 375.0,
+            "verify_hash_equivalents_real": 377.0
+          },
+          "parameters": {
+            "hash_len": 256,
+            "max_g_bit": 2,
+            "max_g_value": 4,
+            "partition_size": 64,
+            "prf_keygen_excluded": true,
+            "repetitions": 1,
+            "samples": 1,
+            "security_parameter": 128,
+            "setup_excluded": true,
+            "total_experiments": 1,
+            "window_radius": 1
+          },
+          "signature": {
+            "avg_signature_bits": 9104.0,
+            "avg_signature_hash_equivalents_concrete": 71.125,
+            "avg_signature_hash_equivalents_object_model": 69.5
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 69.5,
+        "sign": 577.3,
+        "spec": {
+          "case_name": "case2",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 188.3,
+          "goal": "Size",
+          "hash_len": 256,
+          "kappa": 129.9,
+          "max_g_value": 4,
+          "partition_num": 64,
+          "security_target": 128,
+          "size_threshold": 72,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 377.0,
+        "verify_rate": 1.0
+      },
+      "small_leaf": {
+        "keygen": 668.0,
+        "raw_result": {
+          "breakdown": {
+            "keygen": {
+              "hash.backend_calls": 668.0,
+              "hash.backend_calls.shake_256": 668.0,
+              "merkle.internal_hash": 223.0,
+              "pprf.expand": 221.0,
+              "tweak_hash.eval": 447.0,
+              "ycsig.ots_leaf_hash": 224.0
+            },
+            "retry": {
+              "hash.backend_calls": 302.0,
+              "hash.backend_calls.shake_256": 302.0,
+              "isp.xof_instances": 4.0,
+              "isp.xof_output_bits": 480.0,
+              "isp.xof_output_bytes": 60.0,
+              "keyed_hash.eval": 298.0,
+              "ycsig.partition_attempt": 298.0
+            },
+            "sign": {
+              "hash.backend_calls": 684.0,
+              "hash.backend_calls.shake_256": 684.0,
+              "isp.xof_instances": 4.0,
+              "isp.xof_output_bits": 480.0,
+              "isp.xof_output_bytes": 60.0,
+              "keyed_hash.eval": 298.0,
+              "merkle.internal_hash": 92.0,
+              "pprf.expand": 162.0,
+              "tweak_hash.eval": 220.0,
+              "ycsig.ots_leaf_hash": 128.0,
+              "ycsig.partition_attempt": 298.0
+            },
+            "sign_core": {
+              "hash.backend_calls": 382.0,
+              "hash.backend_calls.shake_256": 382.0,
+              "merkle.internal_hash": 92.0,
+              "pprf.expand": 162.0,
+              "tweak_hash.eval": 220.0,
+              "ycsig.ots_leaf_hash": 128.0
+            },
+            "verify": {
+              "hash.backend_calls": 286.0,
+              "hash.backend_calls.shake_256": 286.0,
+              "merkle.internal_hash": 131.0,
+              "pprf.expand": 59.0,
+              "tweak_hash.eval": 227.0,
+              "ycsig.ots_leaf_hash": 96.0
+            }
+          },
+          "case": "VISPT-case2-Size-w4-k128-P56-R1-H256",
+          "operations": {
+            "keygen_backend_hash_calls": 668.0,
+            "keygen_hash_equivalents_real": 668.0,
+            "keygen_sign_relation_gap_real": 0.0,
+            "retry_attempt_count_real": 298.0,
+            "retry_attempt_hash_equivalents_real": 298.0,
+            "retry_backend_hash_calls": 302.0,
+            "retry_hash_equivalents_real": 302.0,
+            "retry_sampler_hash_equivalents_real": 4.0,
+            "retry_sampler_output_bits_real": 480.0,
+            "retry_sampler_output_bytes_real": 60.0,
+            "sign_backend_hash_calls": 684.0,
+            "sign_core_backend_hash_calls": 382.0,
+            "sign_core_hash_equivalents_real": 384.0,
+            "sign_hash_equivalents_real": 597.3,
+            "verify_backend_hash_calls": 286.0,
+            "verify_hash_equivalents_real": 284.0
+          },
+          "parameters": {
+            "hash_len": 256,
+            "max_g_bit": 2,
+            "max_g_value": 4,
+            "partition_size": 56,
+            "prf_keygen_excluded": true,
+            "repetitions": 1,
+            "samples": 1,
+            "security_parameter": 128,
+            "setup_excluded": true,
+            "total_experiments": 1,
+            "window_radius": 1
+          },
+          "signature": {
+            "avg_signature_bits": 9488.0,
+            "avg_signature_hash_equivalents_concrete": 74.125,
+            "avg_signature_hash_equivalents_object_model": 71.5
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 71.5,
+        "sign": 597.3,
+        "spec": {
+          "case_name": "case2",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 213.3,
+          "goal": "Size",
+          "hash_len": 256,
+          "kappa": 129.2,
+          "max_g_value": 4,
+          "partition_num": 56,
+          "security_target": 128,
+          "size_threshold": 74,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 284.0,
+        "verify_rate": 1.0
+      }
+    }
+  }
+}

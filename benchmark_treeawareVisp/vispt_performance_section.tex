@@ -1,0 +1,193 @@
+\subsection{Performance Evaluation for $\YCSig$ with $\ValStrictISPT$}
+\label{sec:vispt_performance}
+
+Theorem~\ref{thm:ucr-vispt} gives the UCR exponent of the tree-aware
+profile-routed construction $\ValStrictISPT$. The theorem analyzes a pair
+event, namely the non-bottom collision event
+$\{\PFunc(\PartitionValue)=\PFunc(\PartitionValue')\neq\Bottom\}$. By contrast,
+the present subsection studies signature size, verification cost, and retry
+cost through the corresponding single-input acceptance event. Accordingly, this
+subsection uses the one-trial acceptance probability $\AccProbT$ in
+Eq.~\eqref{eq:vispt-acceptance}, rather than the pair-collision probability in
+Theorem~\ref{thm:ucr-vispt}.
+
+\paragraph{Evaluation setup.}
+The evaluation uses the profile-restricted routing framework defined in
+Section~\ref{sec:vispt_ucr}. For every accepted histogram $\CountVec$, the
+effective shape family $\DyShapeFamilyOf{\CountVec}$, the profile rule
+$\ProfileRuleT$, the selected profile $\ShapeProfileOf{\CountVec}$, the support
+size $\ShapeSupportSizeOf{\CountVec}$, and the guarded count
+$\GuardCountTOf{\CountVec}$ are the public deterministic objects specified in
+the UCR analysis. The profile-routing layer samples one exact-uniform
+permutation of $\ShapeProfileOf{\CountVec}$, and the score guards act only as
+sample-then-abort filters.
+
+The experimental grid varies $\MaxGValue$, $\HashLen$, $\PartitionNum$,
+$\WindowRadius$, $\EntropyFloor$, $\SizeThreshold$, and $\VrfThreshold$. The
+core shape vocabulary is the dyadic profile family from
+Section~\ref{sec:vispt_ucr}: empty and full shapes, aligned dyadic intervals,
+their complements, singletons, and deterministic residual shapes when required
+to realize the exact column sums. The row-local score
+$\RowCostT(\ShapeSet)$ is used only inside $\ProfileRuleT$ to select
+tree-friendly profiles. The final signature-size and verification costs are
+always computed on the actual global universe
+$\LeafUniverseSize=\PartitionNum\cdot\MaxGValue$.
+
+\paragraph{Certification workflow.}
+The search follows a UCR-first workflow. For each candidate parameter tuple,
+the exact unguarded profile-support size $\ShapeSupportSizeOf{\CountVec}$ is
+computed for every $\CountVec\in\WinCountSetT$. Because both score guards are
+abort-style filters, enabling a guard can only decrease the non-bottom
+collision mass. Therefore the exact support-only UCR exponent is a
+conservative sufficient certificate for the guarded sampler: if the
+support-only exponent already satisfies $\KappaT\ge\kappa^{*}$, then the
+guarded construction also satisfies the target. After this exact UCR filter,
+Monte Carlo simulation estimates the guarded one-trial acceptance probability
+$\AccProbT$, the retry cost $\mathbb E[Re]=1/\AccProbT$, and the
+implementation-level $\YCSig$ costs.
+
+\paragraph{Cost model.}
+For an accepted output $\Groups$, let
+$\SelectedSet=S(\Groups)=\{i\cdot\MaxGValue+\BlockValue:$
+$\BlockValue\in\SubGroup{i}\}\subseteq[\LeafUniverseSize]$, where
+$\LeafUniverseSize=\PartitionNum\cdot\MaxGValue$. Let
+$\CompSelectedSet=[\LeafUniverseSize]\setminus\SelectedSet$,
+$\SelNodeNum=|\MaxCov{\LeafUniverseSize}{\SelectedSet}|$, and
+$\CompNodeNum=|\MaxCov{\LeafUniverseSize}{\CompSelectedSet}|$. The
+signature-size object model is $\SelNodeNum+\CompNodeNum$. The reported
+verification cost uses the complement-signing accounting and is evaluated from
+the same actual-$\LeafUniverseSize$ canonical cover routine as the PPRF and
+Merkle-tree layers.
+
+The signing cost includes both the accepted-signature core cost and the
+Las Vegas salt-search cost. In the invocation-based hash-equivalent accounting
+used in this table, one retry costs one domain-separated XOF transcript,
+because $\PartitionValue$ and the route stream can be generated from the same
+XOF state. Thus the reported signing cost is
+$\CT_{\mathsf{sign}}^{\mathsf{tot}}
+=\CT_{\mathsf{sign}}^{\mathsf{core}}+\mathbb E[Re]$. More generally, if an
+implementation charges $\CT_{\mathsf{retry}}$ hash equivalents per trial, then
+$\CT_{\mathsf{sign}}^{\mathsf{tot}}
+=\CT_{\mathsf{sign}}^{\mathsf{core}}
++\mathbb E[Re]\cdot\CT_{\mathsf{retry}}$.
+
+The parameter search follows the same two-case convention as
+Table~\ref{tab:all-L-windowed}. Case~1 searches admissible
+$\HashLen\ge\kappa^{*}$ with $\HashLen/\MaxGBit\in\Nn$, and Case~2 searches
+admissible $\HashLen\ge2\kappa^{*}$ with
+$\HashLen/\MaxGBit\in\Nn$. The expanded grid covers
+$\kappa^{*}\in\{128,160,192\}$ and considers
+$\MaxGValue\in\{4,16,64,128,256\}$. For each candidate, the search ranges over
+$\HashLen$, $\MaxGValue$, $\PartitionNum$, $\WindowRadius$, $\EntropyFloor$,
+$\SizeThreshold$, and $\VrfThreshold$. Every numerical row satisfies the
+tree-aware UCR constraint $\KappaT\ge\kappa^{*}$ from
+Eq.~\eqref{eq:vispt-ucr} and the retry constraint
+$\mathbb E[Re]=1/\AccProbT$. Rows marked as $\Pending$ identify search cells
+for which the current automated sweep did not retain a benchmarked row under
+the present exact UCR filter and retry budget.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{1.15pt}
+\caption{Expanded parameter candidates and implementation-level costs for
+$\YCSig$ instantiated with $\ValStrictISPT$. Case~1 searches admissible
+$\HashLen\ge\kappa^{*}$ with $\HashLen/\MaxGBit\in\Nn$, and Case~2 searches
+admissible $\HashLen\ge2\kappa^{*}$ with
+$\HashLen/\MaxGBit\in\Nn$. The columns up to $\kappa^{*}$ report the
+$\ValStrictISPT$ parameters and certification quantities. The columns KeyGen,
+Sign, Verify, and Sig. Size report hash-equivalent implementation costs under
+the actual-$\LeafUniverseSize$ canonical cover model. The Sign column includes
+the expected Las Vegas retry cost. Rows marked $\Pending$ are search cells
+for which the current automated sweep did not retain a benchmarked row under
+the present exact UCR filter and retry budget.}
+\label{tab:vispt-parameter-search}
+\resizebox{0.999\textwidth}{!}{
+\begin{tabular}{c c c c c c c c c c c c c c | c c c c}
+\toprule
+Case & Goal & $\MaxGValue$ & $\PartitionNum$ &
+$\WindowRadius$ & $\EntropyFloor$ & $\SizeThreshold$ & $\VrfThreshold$ &
+$\LeafUniverseSize$ & $\BlockNum$ & $\HashLen$ &
+$\mathbb E[Re]$ & $\KappaT$ & $\kappa^{*}$ &
+KeyGen & Sign & Verify & Sig. Size \\
+\midrule
+Case 1 & Size & 4 & 64 & 1 & 115 & 80 & $\infty$ & 256 & 64 & 128 & 102.4 & 130.5 & 128 & 766 & 273.4 & 547.8 & 79.8 \\
+Case 1 & Size & 4 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 4 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+\midrule
+Case 2 & Size & 4 & 64 & 1 & 112 & 72 & $\infty$ & 256 & 128 & 256 & 188.3 & 129.9 & 128 & 766 & 577.3 & 377 & 69.5 \\
+Case 2 & Size & 4 & 56 & 1 & 112 & 74 & $\infty$ & 224 & 128 & 256 & 213.3 & 129.2 & 128 & 668 & 597.3 & 284 & 71.5 \\
+Case 2 & Size & 4 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 4 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 16 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 64 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 128 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Size & 256 & \Pending & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+\midrule
+Case 1 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 1 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+\midrule
+Case 2 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 4 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 16 & \Pending & \Pending & \Pending & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 64 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 128 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 128 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 160 & \Pending & \Pending & \Pending & \Pending \\
+Case 2 & Verify & 256 & \Pending & \Pending & \NA & $\infty$ & \Pending & \Pending & \Pending & \Pending & \Pending & \Pending & 192 & \Pending & \Pending & \Pending & \Pending \\
+\bottomrule
+\end{tabular}
+}
+\vspace{-2mm}
+\end{table}
+
+Table~\ref{tab:vispt-parameter-search} reports the rows retained by the current automated search. Each numerical row passes the exact profile-support UCR filter with $\KappaT\ge\kappa^{*}$, satisfies the guarded retry budget with target $256$ and cap $320$, and is then benchmarked at the concrete $\YCSig+\ValStrictISPT$ level. Rows marked $\Pending$ are search cells for which the current grid did not retain a benchmarked candidate.
+
+In Case~1, the best size-oriented row in the current grid uses $\MaxGValue=4$, $\PartitionNum=64$, $\HashLen=128$, $\SizeThreshold=80$, and yields mean signature-size cost about 79.8 with verification cost about 547.8.
+
+In Case~2, the smallest retained signature-size row gives mean cost about 69.5, while the most compact retained row uses $\LeafUniverseSize=224$ and gives mean signature-size cost about 71.5.
+
+No Case~2 verification-oriented row was retained within the current exact UCR filter and retry budget.
+
+The remaining $\Pending$ cells are not negative results. They identify the parts of the expanded grid that still need either a wider parameter sweep or more aggressive exact guarded counting before benchmark certification.
+
