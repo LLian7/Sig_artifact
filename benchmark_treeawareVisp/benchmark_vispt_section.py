@@ -117,6 +117,7 @@ class VISPTSearchConfig:
     retry_slack: float = 64.0
     hash_len_max_factor_case1: float = 1.5
     hash_len_max_factor_case2: float = 1.25
+    stop_after_candidates: int = 0
     window_radius_max_size: int = 2
     window_radius_max_verify: int = 1
     partition_slack_verify: int = 8
@@ -558,8 +559,24 @@ def _hash_len_candidates(
 ) -> Iterable[int]:
     max_g_bit = cell.max_g_value.bit_length() - 1
     min_hash_len = _cell_min_hash_len(cell.case_name, cell.security_target)
+    if cell.case_name == "case1":
+        max_hash_len = int(math.floor(min_hash_len * config.hash_len_max_factor_case1))
+    elif cell.case_name == "case2":
+        max_hash_len = int(math.floor(min_hash_len * config.hash_len_max_factor_case2))
+    else:
+        raise ValueError(f"unsupported case_name={cell.case_name!r}")
+
     start = min_hash_len + ((max_g_bit - (min_hash_len % max_g_bit)) % max_g_bit)
-    return (start,)
+    aligned_max = max_hash_len - (max_hash_len % max_g_bit)
+    candidates = set(range(start, max(start, aligned_max) + 1, max_g_bit))
+
+    # Always keep known-good static seed rows in range, even if they lie off the
+    # default factor cap for this search cell.
+    for seed in _static_seed_specs_by_base_key().get(_cell_base_key(cell), ()):
+        if seed.hash_len is not None:
+            candidates.add(seed.hash_len)
+
+    return tuple(sorted(candidates))
 
 
 def _partition_candidates(
@@ -1194,6 +1211,17 @@ def _search_base_cell_candidates(
                             retry_target=config.retry_limit,
                         ):
                             candidates[candidate_key] = candidate
+                            if (
+                                config.stop_after_candidates > 0
+                                and len(candidates) >= config.stop_after_candidates
+                            ):
+                                return sorted(
+                                    candidates.values(),
+                                    key=lambda candidate: _candidate_proxy_sort_key(
+                                        candidate,
+                                        retry_target=config.retry_limit,
+                                    ),
+                                )
 
     return sorted(
         candidates.values(),
@@ -2223,6 +2251,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of shortlisted candidates benchmarked per search cell.",
     )
     parser.add_argument(
+        "--stop-after-candidates",
+        type=int,
+        default=0,
+        help="Optional early-exit cap on valid search candidates retained per cell (0 keeps exhaustive search).",
+    )
+    parser.add_argument(
         "--cases",
         default=None,
         help="Optional comma-separated search filter over case names, e.g. case1,case2.",
@@ -2296,6 +2330,7 @@ def _main() -> int:
             acceptance_trials=args.acceptance_trials,
             final_acceptance_trials=args.final_acceptance_trials,
             finalist_count=args.finalist_count,
+            stop_after_candidates=args.stop_after_candidates,
             benchmark_samples=args.samples,
             benchmark_repetitions=args.repetitions,
         )

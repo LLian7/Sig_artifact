@@ -226,6 +226,82 @@
         "verify_rate": 1.0
       }
     },
+    "case1|Size|160|4": {
+      "best": {
+        "keygen": 2108.0,
+        "raw_result": {
+          "operations": {
+            "keygen_hash_equivalents_real": 2108.0,
+            "sign_core_hash_equivalents_real": 554.54,
+            "sign_hash_equivalents_real": 732.6269565217391,
+            "verify_hash_equivalents_real": 1553.46
+          },
+          "signature": {
+            "avg_signature_hash_equivalents_object_model": 108.4
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 108.4,
+        "sign": 732.6269565217391,
+        "spec": {
+          "case_name": "case1",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 178.08695652173913,
+          "goal": "Size",
+          "hash_len": 352,
+          "kappa": 161.28638336301105,
+          "max_g_value": 4,
+          "partition_num": 176,
+          "security_target": 160,
+          "size_threshold": 117,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 1553.46,
+        "verify_rate": 1.0
+      }
+    },
+    "case1|Size|192|4": {
+      "best": {
+        "keygen": 2684.0,
+        "raw_result": {
+          "operations": {
+            "keygen_hash_equivalents_real": 2684.0,
+            "sign_core_hash_equivalents_real": 705.44,
+            "sign_hash_equivalents_real": 910.24,
+            "verify_hash_equivalents_real": 1978.56
+          },
+          "signature": {
+            "avg_signature_hash_equivalents_object_model": 134.26
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 134.26,
+        "sign": 910.24,
+        "spec": {
+          "case_name": "case1",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 204.8,
+          "goal": "Size",
+          "hash_len": 448,
+          "kappa": 201.0941362227364,
+          "max_g_value": 4,
+          "partition_num": 224,
+          "security_target": 192,
+          "size_threshold": 143,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 1978.56,
+        "verify_rate": 1.0
+      }
+    },
     "case2|Size|128|4": {
       "best": {
         "keygen": 766.0,
@@ -449,6 +525,82 @@
           "window_radius": 1
         },
         "verify": 284.0,
+        "verify_rate": 1.0
+      }
+    },
+    "case2|Size|160|4": {
+      "best": {
+        "keygen": 2108.0,
+        "raw_result": {
+          "operations": {
+            "keygen_hash_equivalents_real": 2108.0,
+            "sign_core_hash_equivalents_real": 554.54,
+            "sign_hash_equivalents_real": 732.6269565217391,
+            "verify_hash_equivalents_real": 1553.46
+          },
+          "signature": {
+            "avg_signature_hash_equivalents_object_model": 108.4
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 108.4,
+        "sign": 732.6269565217391,
+        "spec": {
+          "case_name": "case2",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 178.08695652173913,
+          "goal": "Size",
+          "hash_len": 352,
+          "kappa": 161.28638336301105,
+          "max_g_value": 4,
+          "partition_num": 176,
+          "security_target": 160,
+          "size_threshold": 117,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 1553.46,
+        "verify_rate": 1.0
+      }
+    },
+    "case2|Size|192|4": {
+      "best": {
+        "keygen": 2684.0,
+        "raw_result": {
+          "operations": {
+            "keygen_hash_equivalents_real": 2684.0,
+            "sign_core_hash_equivalents_real": 705.44,
+            "sign_hash_equivalents_real": 910.24,
+            "verify_hash_equivalents_real": 1978.56
+          },
+          "signature": {
+            "avg_signature_hash_equivalents_object_model": 134.26
+          },
+          "verify_rate": 1.0
+        },
+        "sig_size": 134.26,
+        "sign": 910.24,
+        "spec": {
+          "case_name": "case2",
+          "entropy_floor": 112,
+          "entropy_floor_tex": null,
+          "expected_retries": 204.8,
+          "goal": "Size",
+          "hash_len": 448,
+          "kappa": 201.0941362227364,
+          "max_g_value": 4,
+          "partition_num": 224,
+          "security_target": 192,
+          "size_threshold": 143,
+          "size_threshold_tex": null,
+          "vrf_threshold": null,
+          "vrf_threshold_tex": "$\\infty$",
+          "window_radius": 1
+        },
+        "verify": 1978.56,
         "verify_rate": 1.0
       }
     }
