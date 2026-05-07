@@ -1,6 +1,14 @@
 import unittest
 
 from benchmark_vispt_section import (
+    _effective_hash_len_budget,
+    _effective_stop_after_candidates,
+    _effective_triple_budget,
+    _ordered_hash_len_candidates,
+    _partition_candidates,
+    _search_seed_specs_for_cell,
+    _threshold_acceptance_stats_from_scores,
+    _window_radius_candidates,
     VISPTMeasuredRow,
     VISPTSearchCell,
     VISPTSearchConfig,
@@ -14,6 +22,16 @@ from benchmark_vispt_section import (
 
 
 class BenchmarkVISPTSectionTests(unittest.TestCase):
+    def test_default_search_config_prefers_fast_feasible_rows(self) -> None:
+        config = VISPTSearchConfig()
+        self.assertTrue(config.prefer_fast_feasible)
+        self.assertEqual(_effective_stop_after_candidates(config), 1)
+        self.assertEqual(_effective_hash_len_budget(config, seeded_only=True), 6)
+        self.assertEqual(_effective_hash_len_budget(config, seeded_only=False), 3)
+        self.assertEqual(_effective_triple_budget(config, seeded_only=True), 24)
+        self.assertEqual(_effective_triple_budget(config, seeded_only=False), 10)
+        self.assertEqual(config.finalist_count, 1)
+
     def test_table_rows_include_five_certified_rows(self) -> None:
         rows = vispt_table_rows()
         certified = [row for row in rows if not row.is_pending]
@@ -35,6 +53,91 @@ class BenchmarkVISPTSectionTests(unittest.TestCase):
         self.assertEqual(case.setup_kwargs["aux_t"]["entropy_floor"], 115)
         self.assertEqual(case.setup_kwargs["size_threshold"], 80)
         self.assertIsNone(case.setup_kwargs["vrf_threshold"])
+
+    def test_dynamic_seed_specs_include_cached_neighbor_rows(self) -> None:
+        seed_spec = VISPTTableRowSpec(
+            case_name="case1",
+            goal="Size",
+            security_target=160,
+            max_g_value=4,
+            partition_num=176,
+            window_radius=1,
+            entropy_floor=112,
+            size_threshold=117,
+            vrf_threshold=None,
+            vrf_threshold_tex=r"$\infty$",
+            hash_len=352,
+            expected_retries=178.1,
+            kappa=161.3,
+        )
+        cached = {
+            ("case1", "Size", 160, 4): {
+                "best": VISPTMeasuredRow(
+                    spec=seed_spec,
+                    keygen=1.0,
+                    sign=1.0,
+                    verify=1.0,
+                    sig_size=1.0,
+                    verify_rate=1.0,
+                    raw_result={},
+                )
+            }
+        }
+        specs = _search_seed_specs_for_cell(
+            VISPTSearchCell("case2", "Size", 160, 4),
+            cached,
+        )
+        self.assertIn(seed_spec, specs)
+
+    def test_ordered_hash_lengths_prioritize_scaled_seed_neighbors(self) -> None:
+        seed_spec = VISPTTableRowSpec(
+            case_name="case1",
+            goal="Size",
+            security_target=160,
+            max_g_value=4,
+            partition_num=176,
+            window_radius=1,
+            entropy_floor=112,
+            size_threshold=117,
+            vrf_threshold=None,
+            vrf_threshold_tex=r"$\infty$",
+            hash_len=352,
+            expected_retries=178.1,
+            kappa=161.3,
+        )
+        ordered = _ordered_hash_len_candidates(
+            VISPTSearchCell("case1", "Size", 192, 4),
+            VISPTSearchConfig(),
+            (seed_spec,),
+        )
+        self.assertIn(424, ordered)
+        self.assertLess(ordered.index(424), ordered.index(256))
+
+    def test_threshold_acceptance_stats_reuse_single_score_sample(self) -> None:
+        stats = _threshold_acceptance_stats_from_scores(
+            [10, 12, 14, 18],
+            [11, 14, 20],
+            trials=8,
+        )
+        self.assertEqual(stats[11], (0.125, 10.0))
+        self.assertEqual(stats[14], (0.375, 12.0))
+        self.assertEqual(stats[20], (0.5, 13.5))
+
+    def test_seedless_size_partition_candidates_prioritize_large_rows(self) -> None:
+        ordered = _partition_candidates(
+            VISPTSearchCell("case1", "Size", 128, 4),
+            64,
+            VISPTSearchConfig(),
+        )
+        self.assertEqual(ordered[:4], (64, 56, 48, 32))
+
+    def test_size_window_radius_candidates_try_radius_one_first(self) -> None:
+        ordered = _window_radius_candidates(
+            VISPTSearchCell("case1", "Size", 128, 4),
+            64,
+            VISPTSearchConfig(),
+        )
+        self.assertEqual(tuple(ordered), (1, 0, 2))
 
     def test_run_vispt_section_benchmarks_on_single_row(self) -> None:
         spec = VISPTTableRowSpec(
@@ -92,6 +195,21 @@ class BenchmarkVISPTSectionTests(unittest.TestCase):
         self.assertEqual(case.setup_kwargs["vrf_threshold"], 12)
 
     def test_search_vispt_sections_finds_toy_row(self) -> None:
+        seed_spec = VISPTTableRowSpec(
+            case_name="case1",
+            goal="Size",
+            security_target=16,
+            max_g_value=4,
+            partition_num=4,
+            window_radius=1,
+            entropy_floor=0,
+            size_threshold=16,
+            vrf_threshold=None,
+            vrf_threshold_tex=r"$\infty$",
+            hash_len=8,
+            expected_retries=2.0,
+            kappa=16.5,
+        )
         sections, measured, _resolved = search_vispt_sections(
             config=VISPTSearchConfig(
                 retry_limit=8.0,
@@ -103,9 +221,24 @@ class BenchmarkVISPTSectionTests(unittest.TestCase):
                 finalist_count=1,
                 benchmark_samples=1,
                 benchmark_repetitions=1,
+                stop_after_candidates=1,
             ),
             random_seed=0,
             search_sections=[[VISPTSearchCell("case1", "Size", 16, 4)]],
+            existing_results={
+                ("case1", "Size", 16, 4): {
+                    "best": VISPTMeasuredRow(
+                        spec=seed_spec,
+                        keygen=1.0,
+                        sign=1.0,
+                        verify=1.0,
+                        sig_size=1.0,
+                        verify_rate=1.0,
+                        raw_result={},
+                    )
+                }
+            },
+            force_refresh_base_keys={("case1", "Size", 16, 4)},
         )
         self.assertEqual(len(sections), 1)
         self.assertEqual(len(sections[0]), 1)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import math
 import statistics
+import time
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from random import Random
@@ -117,17 +119,24 @@ class VISPTSearchConfig:
     retry_slack: float = 64.0
     hash_len_max_factor_case1: float = 1.5
     hash_len_max_factor_case2: float = 1.25
-    stop_after_candidates: int = 0
+    prefer_fast_feasible: bool = True
+    stop_after_candidates: int = 1
+    cell_search_time_budget_seconds: float = 20.0
+    max_seeded_hash_lens: int = 6
+    max_broad_hash_lens: int = 3
+    max_seeded_triples_per_hash: int = 24
+    max_broad_triples_per_hash: int = 10
+    hash_len_seed_neighbor_steps: int = 6
     window_radius_max_size: int = 2
     window_radius_max_verify: int = 1
     partition_slack_verify: int = 8
     partition_head_span_size: int = 32
     partition_tail_span_size: int = 16
-    pilot_trials: int = 2048
-    pilot_accepted_samples: int = 32
-    acceptance_trials: int = 4096
-    final_acceptance_trials: int = 32768
-    finalist_count: int = 3
+    pilot_trials: int = 1024
+    pilot_accepted_samples: int = 16
+    acceptance_trials: int = 2048
+    final_acceptance_trials: int = 8192
+    finalist_count: int = 1
     benchmark_samples: int = 8
     benchmark_repetitions: int = 1
 
@@ -599,7 +608,25 @@ def _partition_candidates(
         candidate = math.ceil(block_num * numerator / 8)
         if min_partition_num <= candidate <= block_num:
             candidates.add(candidate)
-    return tuple(sorted(candidates))
+    ordered: List[int] = []
+    seen: set[int] = set()
+
+    def add(candidate: int) -> None:
+        if candidate in candidates and candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+
+    for candidate in (
+        block_num,
+        math.ceil(block_num * 7 / 8),
+        math.ceil(block_num * 3 / 4),
+        math.ceil(block_num * 2 / 3),
+        math.ceil(block_num / 2),
+    ):
+        add(candidate)
+    for candidate in sorted(candidates, reverse=True):
+        add(candidate)
+    return tuple(ordered)
 
 
 def _window_radius_candidates(
@@ -609,7 +636,19 @@ def _window_radius_candidates(
 ) -> Iterable[int]:
     max_radius = block_num // cell.max_g_value
     cap = config.window_radius_max_verify if cell.goal == "Verify" else config.window_radius_max_size
-    return range(0, min(max_radius, cap) + 1)
+    limit = min(max_radius, cap)
+    if cell.goal == "Verify":
+        return range(0, limit + 1)
+    ordered: List[int] = []
+    seen: set[int] = set()
+    for radius in (1, 0, 2):
+        if 0 <= radius <= limit and radius not in seen:
+            seen.add(radius)
+            ordered.append(radius)
+    for radius in range(0, limit + 1):
+        if radius not in seen:
+            ordered.append(radius)
+    return tuple(ordered)
 
 
 def _entropy_floor_candidates(
@@ -717,6 +756,107 @@ def _estimate_acceptance_probability(
     return acceptance
 
 
+def _route_score_for_groups(
+    goal: str,
+    groups: Sequence[Sequence[int]],
+    params: TreeAwareISPParameters,
+) -> int:
+    if goal == "Size":
+        return tree_score(groups, params)
+    return verify_score(groups, params)
+
+
+@lru_cache(maxsize=4096)
+def _sample_base_route_scores(
+    goal: str,
+    hash_len: int,
+    max_g_value: int,
+    partition_num: int,
+    window_radius: int,
+    entropy_floor: Optional[int],
+    *,
+    trials: int,
+    seed: int,
+) -> tuple[int, ...]:
+    params = _candidate_params(
+        hash_len=hash_len,
+        max_g_value=max_g_value,
+        partition_num=partition_num,
+        window_radius=window_radius,
+        entropy_floor=entropy_floor,
+        size_threshold=None,
+        vrf_threshold=None,
+    )
+    rng = Random(seed)
+    scores: List[int] = []
+    for _ in range(trials):
+        partition_value = rng.getrandbits(params.hash_len)
+        groups = treeaware_isp(partition_value, params)
+        if groups is None:
+            continue
+        scores.append(_route_score_for_groups(goal, groups, params))
+    return tuple(scores)
+
+
+def _threshold_acceptance_stats_from_scores(
+    accepted_scores: Sequence[int],
+    thresholds: Sequence[int],
+    *,
+    trials: int,
+) -> Dict[int, tuple[float, float]]:
+    if not thresholds:
+        return {}
+    ordered_scores = sorted(accepted_scores)
+    ordered_thresholds = tuple(sorted(set(thresholds)))
+    if not ordered_scores:
+        return {
+            threshold: (0.0, math.inf)
+            for threshold in ordered_thresholds
+        }
+
+    prefix_sums: List[int] = [0]
+    for score in ordered_scores:
+        prefix_sums.append(prefix_sums[-1] + score)
+
+    stats: Dict[int, tuple[float, float]] = {}
+    for threshold in ordered_thresholds:
+        accepted_count = bisect.bisect_right(ordered_scores, threshold)
+        if accepted_count == 0:
+            stats[threshold] = (0.0, math.inf)
+            continue
+        acceptance = accepted_count / trials if trials > 0 else 0.0
+        mean_score = prefix_sums[accepted_count] / accepted_count
+        stats[threshold] = (acceptance, mean_score)
+    return stats
+
+
+def _estimate_threshold_acceptance_stats(
+    cell: VISPTSearchCell,
+    params: TreeAwareISPParameters,
+    thresholds: Sequence[int],
+    *,
+    trials: int,
+    seed: int,
+) -> Dict[int, tuple[float, float]]:
+    if not thresholds:
+        return {}
+    accepted_scores = _sample_base_route_scores(
+        cell.goal,
+        params.hash_len,
+        1 << params.max_g_bit,
+        params.partition_num,
+        params.window_radius,
+        params.aux_t.get("entropy_floor"),
+        trials=trials,
+        seed=seed,
+    )
+    return _threshold_acceptance_stats_from_scores(
+        accepted_scores,
+        thresholds,
+        trials=trials,
+    )
+
+
 def _estimate_acceptance_with_group_samples(
     params: TreeAwareISPParameters,
     *,
@@ -738,6 +878,29 @@ def _estimate_acceptance_with_group_samples(
     return acceptance, tuple(group_samples)
 
 
+def _collect_accepted_group_samples(
+    params: TreeAwareISPParameters,
+    *,
+    seed: int,
+    collect_group_count: int,
+    max_trials: Optional[int] = None,
+) -> tuple[GroupsKey, ...]:
+    if collect_group_count <= 0:
+        return ()
+    rng = Random(seed)
+    group_samples: List[GroupsKey] = []
+    trials = 0
+    while len(group_samples) < collect_group_count:
+        if max_trials is not None and trials >= max_trials:
+            break
+        trials += 1
+        partition_value = rng.getrandbits(params.hash_len)
+        groups = treeaware_isp(partition_value, params)
+        if groups is not None:
+            group_samples.append(tuple(tuple(subgroup) for subgroup in groups))
+    return tuple(group_samples)
+
+
 def _pilot_scores(
     cell: VISPTSearchCell,
     params: TreeAwareISPParameters,
@@ -746,20 +909,17 @@ def _pilot_scores(
     accepted_samples: int,
     seed: int,
 ) -> List[int]:
-    rng = Random(seed)
-    scores: List[int] = []
-    for _ in range(trials):
-        partition_value = rng.getrandbits(params.hash_len)
-        groups = treeaware_isp(partition_value, params)
-        if groups is None:
-            continue
-        if cell.goal == "Size":
-            scores.append(tree_score(groups, params))
-        else:
-            scores.append(verify_score(groups, params))
-        if len(scores) >= accepted_samples:
-            break
-    return scores
+    scores = _sample_base_route_scores(
+        cell.goal,
+        params.hash_len,
+        1 << params.max_g_bit,
+        params.partition_num,
+        params.window_radius,
+        params.aux_t.get("entropy_floor"),
+        trials=trials,
+        seed=seed,
+    )
+    return list(scores[:accepted_samples])
 
 
 def _threshold_candidates_from_scores(
@@ -827,6 +987,114 @@ def _static_seed_specs_by_base_key() -> Dict[
     }
 
 
+def _dynamic_seed_specs_by_base_key(
+    resolved_rows: Mapping[tuple[str, str, int, int], Mapping[str, VISPTMeasuredRow]],
+) -> Dict[tuple[str, str, int, int], tuple[VISPTTableRowSpec, ...]]:
+    grouped: Dict[tuple[str, str, int, int], List[VISPTTableRowSpec]] = {}
+    for base_key, variants in resolved_rows.items():
+        for row in variants.values():
+            spec = row.spec
+            if spec.is_pending:
+                continue
+            grouped.setdefault(base_key, []).append(spec)
+    return {
+        base_key: tuple(rows)
+        for base_key, rows in grouped.items()
+    }
+
+
+def _search_seed_specs_for_cell(
+    cell: VISPTSearchCell,
+    resolved_rows: Mapping[tuple[str, str, int, int], Mapping[str, VISPTMeasuredRow]],
+) -> tuple[VISPTTableRowSpec, ...]:
+    collected: List[tuple[tuple[int, int, int, int, int], VISPTTableRowSpec]] = []
+    seen: set[tuple[int, int, int, Optional[int], Optional[int], Optional[int]]] = set()
+    dynamic = _dynamic_seed_specs_by_base_key(resolved_rows)
+
+    def add_specs(specs: Sequence[VISPTTableRowSpec]) -> None:
+        for spec in specs:
+            key = (
+                spec.hash_len or -1,
+                spec.partition_num or -1,
+                spec.window_radius or -1,
+                spec.entropy_floor,
+                spec.size_threshold,
+                spec.vrf_threshold,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            collected.append(
+                (
+                    (
+                        0 if spec.case_name == cell.case_name else 1,
+                        abs(spec.security_target - cell.security_target),
+                        0 if spec.security_target <= cell.security_target else 1,
+                        spec.hash_len or math.inf,
+                        spec.partition_num or math.inf,
+                    ),
+                    spec,
+                )
+            )
+
+    base_key = _cell_base_key(cell)
+    add_specs(dynamic.get(base_key, ()))
+    add_specs(_static_seed_specs_by_base_key().get(base_key, ()))
+
+    for seed_map in (dynamic, _static_seed_specs_by_base_key()):
+        for (_case_name, goal, _security_target, max_g_value), specs in seed_map.items():
+            if goal != cell.goal or max_g_value != cell.max_g_value:
+                continue
+            add_specs(specs)
+
+    collected.sort(key=lambda item: item[0])
+    return tuple(spec for _rank, spec in collected)
+
+
+def _ordered_hash_len_candidates(
+    cell: VISPTSearchCell,
+    config: VISPTSearchConfig,
+    seed_specs: Sequence[VISPTTableRowSpec],
+) -> tuple[int, ...]:
+    base_candidates = tuple(_hash_len_candidates(cell, config))
+    if not seed_specs:
+        return base_candidates
+
+    max_g_bit = cell.max_g_value.bit_length() - 1
+    min_hash_len = _cell_min_hash_len(cell.case_name, cell.security_target)
+    ordered: List[int] = []
+    seen: set[int] = set()
+    min_aligned = base_candidates[0]
+
+    def add(hash_len: int) -> None:
+        if hash_len < min_aligned:
+            return
+        if hash_len % max_g_bit != 0:
+            return
+        if hash_len not in seen:
+            seen.add(hash_len)
+            ordered.append(hash_len)
+
+    add(base_candidates[0])
+    for spec in seed_specs:
+        if spec.hash_len is None:
+            continue
+        seed_min = _cell_min_hash_len(spec.case_name, spec.security_target)
+        scaled = int(round(spec.hash_len * (min_hash_len / seed_min)))
+        scaled += (max_g_bit - (scaled % max_g_bit)) % max_g_bit
+        for delta in range(
+            -config.hash_len_seed_neighbor_steps,
+            config.hash_len_seed_neighbor_steps + 1,
+        ):
+            add(scaled + delta * max_g_bit)
+        for delta in range(-2, 3):
+            add(spec.hash_len + delta * max_g_bit)
+
+    for hash_len in base_candidates:
+        add(hash_len)
+    return tuple(ordered)
+
+
 def _spec_from_candidate(candidate: VISPTSearchCandidate) -> VISPTTableRowSpec:
     if candidate.goal == "Verify":
         return VISPTTableRowSpec(
@@ -869,6 +1137,36 @@ def _retry_cap(config: VISPTSearchConfig) -> float:
     return config.retry_limit + max(0.0, config.retry_slack)
 
 
+def _effective_stop_after_candidates(config: VISPTSearchConfig) -> int:
+    if config.stop_after_candidates > 0:
+        return config.stop_after_candidates
+    return 1 if config.prefer_fast_feasible else 0
+
+
+def _effective_hash_len_budget(
+    config: VISPTSearchConfig,
+    *,
+    seeded_only: bool,
+) -> int:
+    if not config.prefer_fast_feasible:
+        return 0
+    return config.max_seeded_hash_lens if seeded_only else config.max_broad_hash_lens
+
+
+def _effective_triple_budget(
+    config: VISPTSearchConfig,
+    *,
+    seeded_only: bool,
+) -> int:
+    if not config.prefer_fast_feasible:
+        return 0
+    return (
+        config.max_seeded_triples_per_hash
+        if seeded_only
+        else config.max_broad_triples_per_hash
+    )
+
+
 def _retry_distance(retries: float, target: float) -> float:
     return abs(retries - target)
 
@@ -903,6 +1201,40 @@ def _base_key_from_text(raw: str) -> tuple[str, str, int, int]:
 
 def _candidate_leaf_universe_size(candidate: VISPTSearchCandidate) -> int:
     return candidate.partition_num * candidate.max_g_value
+
+
+def _spec_parameter_key(
+    spec: VISPTTableRowSpec,
+) -> tuple[str, str, int, int, Optional[int], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
+    return (
+        spec.case_name,
+        spec.goal,
+        spec.security_target,
+        spec.max_g_value,
+        spec.partition_num,
+        spec.window_radius,
+        spec.entropy_floor,
+        spec.size_threshold,
+        spec.vrf_threshold,
+        spec.hash_len,
+    )
+
+
+def _candidate_parameter_key(
+    candidate: VISPTSearchCandidate,
+) -> tuple[str, str, int, int, int, int, Optional[int], Optional[int], Optional[int], int]:
+    return (
+        candidate.case_name,
+        candidate.goal,
+        candidate.security_target,
+        candidate.max_g_value,
+        candidate.partition_num,
+        candidate.window_radius,
+        candidate.entropy_floor,
+        candidate.size_threshold,
+        candidate.vrf_threshold,
+        candidate.hash_len,
+    )
 
 
 def _goal_metric_from_measured(row: VISPTMeasuredRow) -> float:
@@ -987,8 +1319,9 @@ def _seed_neighborhood_candidates(
     cell: VISPTSearchCell,
     block_num: int,
     config: VISPTSearchConfig,
+    seed_specs: Sequence[VISPTTableRowSpec],
 ) -> Optional[tuple[tuple[int, int, Optional[int]], ...]]:
-    seeds = _static_seed_specs_by_base_key().get(_cell_base_key(cell))
+    seeds = tuple(seed_specs)
     if not seeds:
         return None
 
@@ -1004,21 +1337,36 @@ def _seed_neighborhood_candidates(
     )
 
     for seed in seeds:
-        partition_offsets = (0, -8, 8)
+        if seed.partition_num is None or seed.hash_len is None:
+            continue
+        seed_block_num = seed.hash_len // (seed.max_g_value.bit_length() - 1)
+        if seed_block_num <= 0:
+            continue
+        scaled_partition_num = int(round(seed.partition_num * (block_num / seed_block_num)))
+        partition_offsets = (-16, -8, -4, 0, 4, 8, 16)
         radius_values = {
             radius
-            for radius in (seed.window_radius,)
+            for radius in (
+                seed.window_radius,
+                min(seed.window_radius + 1, max_radius) if seed.window_radius is not None else None,
+            )
             if radius is not None and 0 <= radius <= max_radius
         }
         for partition_offset in partition_offsets:
-            partition_num = seed.partition_num + partition_offset
+            partition_num = scaled_partition_num + partition_offset
             if partition_num < min_partition_num or partition_num > max_partition_num:
                 continue
             for window_radius in radius_values:
                 if cell.goal == "Verify":
                     candidates.add((partition_num, window_radius, None))
                     continue
-                candidates.add((partition_num, window_radius, seed.entropy_floor))
+                entropy_values = {
+                    seed.entropy_floor,
+                    None if seed.entropy_floor is None else max(0, seed.entropy_floor - 8),
+                    None if seed.entropy_floor is None else seed.entropy_floor + 8,
+                }
+                for entropy_floor in entropy_values:
+                    candidates.add((partition_num, window_radius, entropy_floor))
     return tuple(sorted(candidates))
 
 
@@ -1091,31 +1439,73 @@ def _search_base_cell_candidates(
     config: VISPTSearchConfig,
     *,
     random_seed: int,
+    resolved_rows: Mapping[tuple[str, str, int, int], Mapping[str, VISPTMeasuredRow]],
 ) -> List[VISPTSearchCandidate]:
     candidates: Dict[
         tuple[int, int, int, Optional[int], Optional[int], Optional[int]],
         VISPTSearchCandidate,
     ] = {}
     retry_cap = _retry_cap(config)
+    stop_after = _effective_stop_after_candidates(config)
+    seed_specs = _search_seed_specs_for_cell(cell, resolved_rows)
+    search_started_at = time.monotonic()
 
-    for hash_len in _hash_len_candidates(cell, config):
-        block_num = hash_len // (cell.max_g_value.bit_length() - 1)
-        seeded_triples = _seed_neighborhood_candidates(cell, block_num, config)
-        if seeded_triples is None:
-            triples: Iterable[tuple[int, int, Optional[int]]] = (
-                (partition_num, window_radius, entropy_floor)
-                for partition_num in _partition_candidates(cell, block_num, config)
-                for window_radius in _window_radius_candidates(cell, block_num, config)
-                for entropy_floor in (
-                    (None,)
-                    if cell.goal == "Verify"
-                    else _entropy_floor_candidates(partition_num)
-                )
+    def time_budget_exceeded() -> bool:
+        if not config.prefer_fast_feasible:
+            return False
+        if config.cell_search_time_budget_seconds <= 0.0:
+            return False
+        return (
+            time.monotonic() - search_started_at
+            >= config.cell_search_time_budget_seconds
+        )
+
+    def search_hash_lengths(
+        hash_len_values: Sequence[int],
+        *,
+        seeded_only: bool,
+    ) -> bool:
+        found_any = False
+        hash_budget = _effective_hash_len_budget(config, seeded_only=seeded_only)
+        if hash_budget > 0:
+            hash_len_values = tuple(hash_len_values[:hash_budget])
+        for hash_len in hash_len_values:
+            if time_budget_exceeded():
+                return found_any
+            block_num = hash_len // (cell.max_g_value.bit_length() - 1)
+            seeded_triples = _seed_neighborhood_candidates(
+                cell,
+                block_num,
+                config,
+                seed_specs,
             )
-        else:
-            triples = seeded_triples
+            if seeded_only:
+                if seeded_triples is None:
+                    continue
+                triple_sets: Sequence[Iterable[tuple[int, int, Optional[int]]]] = (seeded_triples,)
+            else:
+                triple_sets = (
+                    (
+                        (partition_num, window_radius, entropy_floor)
+                        for partition_num in _partition_candidates(cell, block_num, config)
+                        for window_radius in _window_radius_candidates(cell, block_num, config)
+                        for entropy_floor in (
+                            (None,)
+                            if cell.goal == "Verify"
+                            else tuple(reversed(_entropy_floor_candidates(partition_num)))
+                        )
+                    ),
+                )
 
-        for partition_num, window_radius, entropy_floor in triples:
+            triple_budget = _effective_triple_budget(config, seeded_only=seeded_only)
+            for triples in triple_sets:
+                explored_triples = 0
+                for partition_num, window_radius, entropy_floor in triples:
+                    if time_budget_exceeded():
+                        return found_any
+                    if triple_budget > 0 and explored_triples >= triple_budget:
+                        break
+                    explored_triples += 1
                     support_acceptance, support_kappa = _exact_vispt_support_metrics(
                         block_num,
                         cell.max_g_value,
@@ -1129,15 +1519,6 @@ def _search_base_cell_candidates(
                     if support_retries > retry_cap:
                         continue
 
-                    base_params = _candidate_params(
-                        hash_len=hash_len,
-                        max_g_value=cell.max_g_value,
-                        partition_num=partition_num,
-                        window_radius=window_radius,
-                        entropy_floor=entropy_floor,
-                        size_threshold=None,
-                        vrf_threshold=None,
-                    )
                     seed_base = _seed_mix(
                         random_seed,
                         hash_len,
@@ -1146,39 +1527,40 @@ def _search_base_cell_candidates(
                         window_radius,
                         -1 if entropy_floor is None else entropy_floor,
                     )
-                    scores = _pilot_scores(
-                        cell,
-                        base_params,
-                        trials=config.pilot_trials,
-                        accepted_samples=config.pilot_accepted_samples,
-                        seed=seed_base,
+                    sample_trials = max(
+                        config.pilot_trials,
+                        config.acceptance_trials,
                     )
+                    sampled_scores = _sample_base_route_scores(
+                        cell.goal,
+                        hash_len,
+                        cell.max_g_value,
+                        partition_num,
+                        window_radius,
+                        entropy_floor,
+                        trials=sample_trials,
+                        seed=seed_base ^ 0xC3C3C3C3,
+                    )
+                    scores = list(sampled_scores[: config.pilot_accepted_samples])
                     thresholds = _threshold_candidates_from_scores(scores, goal=cell.goal)
+                    threshold_stats = _threshold_acceptance_stats_from_scores(
+                        sampled_scores,
+                        thresholds,
+                        trials=sample_trials,
+                    )
                     for threshold in thresholds:
-                        filtered_scores = [score for score in scores if score <= threshold]
-                        if not filtered_scores:
-                            continue
-                        size_threshold = threshold if cell.goal == "Size" else None
-                        vrf_threshold = threshold if cell.goal == "Verify" else None
-                        guarded_params = _candidate_params(
-                            hash_len=hash_len,
-                            max_g_value=cell.max_g_value,
-                            partition_num=partition_num,
-                            window_radius=window_radius,
-                            entropy_floor=entropy_floor,
-                            size_threshold=size_threshold,
-                            vrf_threshold=vrf_threshold,
-                        )
-                        acceptance = _estimate_acceptance_probability(
-                            guarded_params,
-                            trials=config.acceptance_trials,
-                            seed=seed_base ^ threshold,
+                        acceptance, proxy_score = threshold_stats.get(
+                            threshold,
+                            (0.0, math.inf),
                         )
                         if acceptance <= 0.0:
                             continue
                         expected_retries = 1.0 / acceptance
                         if expected_retries > retry_cap:
                             continue
+                        size_threshold = threshold if cell.goal == "Size" else None
+                        vrf_threshold = threshold if cell.goal == "Verify" else None
+                        found_any = True
                         candidate = VISPTSearchCandidate(
                             case_name=cell.case_name,
                             goal=cell.goal,
@@ -1192,7 +1574,7 @@ def _search_base_cell_candidates(
                             hash_len=hash_len,
                             expected_retries=expected_retries,
                             kappa=support_kappa,
-                            proxy_score=statistics.fmean(filtered_scores),
+                            proxy_score=proxy_score,
                         )
                         candidate_key = (
                             hash_len,
@@ -1211,17 +1593,39 @@ def _search_base_cell_candidates(
                             retry_target=config.retry_limit,
                         ):
                             candidates[candidate_key] = candidate
-                            if (
-                                config.stop_after_candidates > 0
-                                and len(candidates) >= config.stop_after_candidates
-                            ):
-                                return sorted(
-                                    candidates.values(),
-                                    key=lambda candidate: _candidate_proxy_sort_key(
-                                        candidate,
-                                        retry_target=config.retry_limit,
-                                    ),
-                                )
+                            if stop_after > 0 and len(candidates) >= stop_after:
+                                return True
+                        # Larger thresholds only increase the retained-score proxy for
+                        # this fixed routing skeleton, so the first retry-feasible
+                        # threshold dominates the later ones in the candidate ranking.
+                        break
+        return found_any
+
+    ordered_hash_lens = _ordered_hash_len_candidates(cell, config, seed_specs)
+    if seed_specs:
+        found_seeded = search_hash_lengths(ordered_hash_lens, seeded_only=True)
+        if (
+            found_seeded
+            and stop_after > 0
+            and len(candidates) >= stop_after
+        ):
+            return sorted(
+                candidates.values(),
+                key=lambda candidate: _candidate_proxy_sort_key(
+                    candidate,
+                    retry_target=config.retry_limit,
+                ),
+            )
+        if candidates:
+            return sorted(
+                candidates.values(),
+                key=lambda candidate: _candidate_proxy_sort_key(
+                    candidate,
+                    retry_target=config.retry_limit,
+                ),
+            )
+
+    search_hash_lengths(tuple(_hash_len_candidates(cell, config)), seeded_only=False)
 
     return sorted(
         candidates.values(),
@@ -1237,10 +1641,24 @@ def _benchmark_selected_candidates(
     config: VISPTSearchConfig,
     *,
     random_seed: int,
+    existing_variants: Optional[Mapping[str, VISPTMeasuredRow]] = None,
 ) -> List[VISPTMeasuredRow]:
     benchmarked: List[VISPTMeasuredRow] = []
     retry_cap = _retry_cap(config)
+    existing_by_spec: Dict[
+        tuple[str, str, int, int, Optional[int], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]],
+        VISPTMeasuredRow,
+    ] = {}
+    if existing_variants is not None:
+        existing_by_spec = {
+            _spec_parameter_key(row.spec): row
+            for row in existing_variants.values()
+        }
     for index, candidate in enumerate(candidates):
+        cached_row = existing_by_spec.get(_candidate_parameter_key(candidate))
+        if cached_row is not None:
+            benchmarked.append(cached_row)
+            continue
         params = _candidate_params(
             hash_len=candidate.hash_len,
             max_g_value=candidate.max_g_value,
@@ -1399,6 +1817,7 @@ def search_vispt_sections(
                     cell,
                     config,
                     random_seed=base_seed,
+                    resolved_rows=resolved_by_base,
                 )
                 shortlist = _select_search_shortlist(
                     base_candidates,
@@ -1410,6 +1829,7 @@ def search_vispt_sections(
                     shortlist,
                     config,
                     random_seed=base_seed,
+                    existing_variants=resolved_by_base.get(base_key),
                 )
                 resolved_variants = {}
                 if benchmarked:
@@ -1710,6 +2130,36 @@ def bootstrap_static_results_cache(
                 samples=samples,
                 repetitions=repetitions,
                 random_seed=_seed_mix(random_seed, group_index, index, spec.hash_len or 0),
+                accepted_groups_samples=(
+                    _collect_accepted_group_samples(
+                        _candidate_params(
+                            hash_len=spec.hash_len or 0,
+                            max_g_value=spec.max_g_value,
+                            partition_num=spec.partition_num or 0,
+                            window_radius=spec.window_radius or 0,
+                            entropy_floor=spec.entropy_floor,
+                            size_threshold=spec.size_threshold,
+                            vrf_threshold=spec.vrf_threshold,
+                        ),
+                        seed=_seed_mix(0xB00D, group_index, index, spec.hash_len or 0),
+                        collect_group_count=max(4, min(16, samples * repetitions)),
+                        max_trials=max(
+                            1024,
+                            int(
+                                math.ceil(
+                                    max(
+                                        4.0,
+                                        float(spec.expected_retries or 1.0),
+                                    )
+                                    * max(4, min(16, samples * repetitions))
+                                    * 4.0
+                                )
+                            ),
+                        ),
+                    )
+                    if spec.hash_len is not None and spec.partition_num is not None
+                    else None
+                ),
             )
             for index, spec in enumerate(specs)
         ]
@@ -2091,9 +2541,11 @@ def render_vispt_section_latex(
         r"$\SizeThreshold$, and $\VrfThreshold$. Every numerical row satisfies the",
         r"tree-aware UCR constraint $\KappaT\ge\kappa^{*}$ from",
         r"Eq.~\eqref{eq:vispt-ucr} and the retry constraint",
-        r"$\mathbb E[Re]=1/\AccProbT$. Rows marked as $\Pending$ identify search cells",
-        r"for which the current automated sweep did not retain a benchmarked row under",
-        r"the present exact UCR filter and retry budget.",
+        r"$\mathbb E[Re]=1/\AccProbT$. The current automated sweep prioritizes",
+        r"fast certification of relatively good rows rather than per-cell exhaustive",
+        r"optimization. Rows marked as $\Pending$ identify search cells for which the",
+        r"current fast-feasible sweep did not retain a benchmarked row under the",
+        r"present exact UCR filter and retry budget.",
         "",
         render_vispt_table_latex(active_sections, measured_rows),
         "",
@@ -2223,38 +2675,38 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pilot-trials",
         type=int,
-        default=2048,
+        default=1024,
         help="Monte Carlo trials for no-guard pilot score sampling.",
     )
     parser.add_argument(
         "--pilot-accepted-samples",
         type=int,
-        default=32,
+        default=16,
         help="Accepted pilot samples collected before threshold generation.",
     )
     parser.add_argument(
         "--acceptance-trials",
         type=int,
-        default=4096,
+        default=2048,
         help="Monte Carlo trials for guarded acceptance estimation during candidate search.",
     )
     parser.add_argument(
         "--final-acceptance-trials",
         type=int,
-        default=32768,
+        default=8192,
         help="Monte Carlo trials for the final retry estimate of shortlisted candidates.",
     )
     parser.add_argument(
         "--finalist-count",
         type=int,
-        default=3,
+        default=1,
         help="Number of shortlisted candidates benchmarked per search cell.",
     )
     parser.add_argument(
         "--stop-after-candidates",
         type=int,
-        default=0,
-        help="Optional early-exit cap on valid search candidates retained per cell (0 keeps exhaustive search).",
+        default=1,
+        help="Early stop once this many retained candidates are found during a cell search.",
     )
     parser.add_argument(
         "--cases",
@@ -2325,12 +2777,12 @@ def _main() -> int:
         search_config = VISPTSearchConfig(
             retry_limit=args.retry_limit,
             retry_slack=args.retry_slack,
+            stop_after_candidates=args.stop_after_candidates,
             pilot_trials=args.pilot_trials,
             pilot_accepted_samples=args.pilot_accepted_samples,
             acceptance_trials=args.acceptance_trials,
             final_acceptance_trials=args.final_acceptance_trials,
             finalist_count=args.finalist_count,
-            stop_after_candidates=args.stop_after_candidates,
             benchmark_samples=args.samples,
             benchmark_repetitions=args.repetitions,
         )
@@ -2346,7 +2798,7 @@ def _main() -> int:
             if args.no_cache
             else load_vispt_results_cache(args.results_cache)
         )
-        if not args.skip_static_bootstrap:
+        if not args.skip_static_bootstrap and not args.cached_only:
             existing_results = bootstrap_static_results_cache(
                 existing_results,
                 samples=args.samples,
