@@ -284,6 +284,57 @@ class YCSigTests(unittest.TestCase):
             (len(legacy_prefixes), len(legacy_positions)),
         )
 
+    def test_treeaware_size_mode_also_signs_the_complement_of_groups(self) -> None:
+        setup = YCSig.SigSetup(
+            128,
+            hash_len=8,
+            max_g_bit=2,
+            partition_size=3,
+            window_radius=1,
+            mode="size",
+            tweak_hash_name="shake_256",
+            keyed_hash_name="shake_256",
+            pprf_hash_name="shake_256",
+            merkle_hash_name="shake_256",
+            key_seed=b"k-seed-size-complement",
+            keyed_hash_key_seed=b"hk-seed-size-complement",
+            ads_seed=b"ads-seed-size-complement",
+            tweak_public_seed=b"twh-public-size-complement",
+            merkle_public_seed=b"mt-public-size-complement",
+            max_sign_retries=1000,
+        )
+
+        scheme = YCSig(setup.params)
+        self.assertTrue(scheme._uses_complement_signing())
+        keypair = scheme.SigGen(setup.randomness_seed)
+        groups = ([0], [1], [2, 3])
+        signature = scheme.SignWithGroups(
+            keypair.secret_key,
+            b"\x5b" * bits_to_bytes(setup.params.security_parameter),
+            0,
+            groups,
+        )
+
+        self.assertTrue(scheme.VerifyWithGroups(keypair.public_key, signature, groups))
+        (
+            _selected_indices,
+            _selected_points,
+            complementary_indices,
+            complementary_points,
+        ) = scheme._groups_to_signed_and_complementary_material(groups)
+        expected_prefixes = PPRF.CanonicalPrefixes(
+            setup.params.pm_PPRF,
+            complementary_points,
+            inputs_normalized=True,
+        )
+        expected_positions = MT.CanonicalStatePositions(
+            setup.params.pm_MT,
+            complementary_indices,
+        )
+
+        self.assertEqual(len(signature.punctured_seeds), len(expected_prefixes))
+        self.assertEqual(len(signature.partial_state_values), len(expected_positions))
+
     def test_sign_and_verify_with_vrf_mode(self) -> None:
         setup = YCSig.SigSetup(
             128,
@@ -311,8 +362,56 @@ class YCSigTests(unittest.TestCase):
         self.assertTrue(
             scheme.SigVrfy(keypair.public_key, b"verify-first message", signature)
         )
-        self.assertFalse(
-            scheme.SigVrfy(keypair.public_key, b"verify-first message!", signature)
+        self.assertTrue(
+            any(
+                not scheme.SigVrfy(
+                    keypair.public_key,
+                    b"verify-first message" + suffix,
+                    signature,
+                )
+                for suffix in (b"!", b"?", b" changed", b"0", b"1", b"nope")
+            )
+        )
+
+    def test_sign_and_verify_with_explicit_full_support_route_policy(self) -> None:
+        setup = YCSig.SigSetup(
+            128,
+            hash_len=8,
+            max_g_bit=2,
+            partition_size=2,
+            aux_t={"profile_rule": "dyadic_greedy", "entropy_floor": 8},
+            route_policy="full_support",
+            vrf_threshold=16,
+            window_radius=1,
+            tweak_hash_name="shake_256",
+            keyed_hash_name="shake_256",
+            pprf_hash_name="shake_256",
+            merkle_hash_name="shake_256",
+            key_seed=b"k-seed-vrf-full-support",
+            keyed_hash_key_seed=b"hk-seed-vrf-full-support",
+            ads_seed=b"ads-seed-vrf-full-support",
+            tweak_public_seed=b"twh-public-vrf-full-support",
+            merkle_public_seed=b"mt-public-vrf-full-support",
+            max_sign_retries=1000,
+        )
+
+        scheme = YCSig(setup.params)
+        keypair = scheme.SigGen(setup.randomness_seed)
+        signature = scheme.SigSign(keypair.secret_key, b"verify-first full-support")
+
+        self.assertEqual(setup.params.pm_ISP.route_policy, "full_support")
+        self.assertTrue(
+            scheme.SigVrfy(keypair.public_key, b"verify-first full-support", signature)
+        )
+        self.assertTrue(
+            any(
+                not scheme.SigVrfy(
+                    keypair.public_key,
+                    b"verify-first full-support" + suffix,
+                    signature,
+                )
+                for suffix in (b"!", b"?", b" changed", b"0", b"1", b"nope")
+            )
         )
 
     def test_verify_uses_signature_salt_without_retry(self) -> None:

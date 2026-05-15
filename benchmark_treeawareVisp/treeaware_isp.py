@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from random import Random
 from typing import Any, Mapping, List, Optional, Sequence, Union
 
@@ -49,6 +49,8 @@ _TREE_COUNT_CACHE: dict[tuple[object, ...], int] = {}
 _EXACT_ROUTE_PLAN_CACHE: dict[tuple[object, ...], "_ExactRoutePlan"] = {}
 _PROFILE_RULE_CACHE: dict[tuple[object, ...], Optional[tuple[tuple[int, ...], ...]]] = {}
 _PROFILE_ROUTE_PLAN_CACHE: dict[tuple[object, ...], Optional["_ProfileRoutePlan"]] = {}
+_PROFILE_ROUTE_PLAN_SUCCESS_CACHE: dict[tuple[object, ...], "_ProfileRoutePlan"] = {}
+_PROFILE_ROUTE_PLAN_FAIL_FLOOR_CACHE: dict[tuple[object, ...], int] = {}
 _DEFAULT_LAMINAR_PATTERN_MASKS: dict[int, tuple[int, ...]] = {}
 _LAMINAR_NONEMPTY_ROWS_CACHE: dict[tuple[int, tuple[int, ...]], tuple[int, ...]] = {}
 _LAMINAR_NONEMPTY_ITEMS_CACHE: dict[
@@ -163,6 +165,35 @@ _VISPT_MODE_ALIASES = {
     "verify": _VISPT_MODE_VRF,
     "verification": _VISPT_MODE_VRF,
 }
+_ROUTE_OBJECTIVE_SIZE = "size"
+_ROUTE_OBJECTIVE_VRF = "vrf"
+_ROUTE_OBJECTIVE_ALIASES = {
+    "size": _ROUTE_OBJECTIVE_SIZE,
+    "sizeaware": _ROUTE_OBJECTIVE_SIZE,
+    "size_aware": _ROUTE_OBJECTIVE_SIZE,
+    "sizemode": _ROUTE_OBJECTIVE_SIZE,
+    "vrf": _ROUTE_OBJECTIVE_VRF,
+    "verify": _ROUTE_OBJECTIVE_VRF,
+    "verification": _ROUTE_OBJECTIVE_VRF,
+    "verifyaware": _ROUTE_OBJECTIVE_VRF,
+    "verify_aware": _ROUTE_OBJECTIVE_VRF,
+    "vrfaware": _ROUTE_OBJECTIVE_VRF,
+    "vrf_aware": _ROUTE_OBJECTIVE_VRF,
+}
+_ROUTE_POLICY_PROFILE = "profile"
+_ROUTE_POLICY_FULL_SUPPORT = "full_support"
+_ROUTE_POLICY_ALIASES = {
+    "profile": _ROUTE_POLICY_PROFILE,
+    "profilemode": _ROUTE_POLICY_PROFILE,
+    "profile_mode": _ROUTE_POLICY_PROFILE,
+    "full_support": _ROUTE_POLICY_FULL_SUPPORT,
+    "fullsupport": _ROUTE_POLICY_FULL_SUPPORT,
+    "fullsupportmode": _ROUTE_POLICY_FULL_SUPPORT,
+    "full_support_mode": _ROUTE_POLICY_FULL_SUPPORT,
+    "full-support": _ROUTE_POLICY_FULL_SUPPORT,
+    "legal": _ROUTE_POLICY_FULL_SUPPORT,
+    "full": _ROUTE_POLICY_FULL_SUPPORT,
+}
 _SCORE_NAME_SIZE = "size"
 _SCORE_NAME_VRF = "vrf"
 _SCORE_NAME_ALIASES = {
@@ -253,6 +284,31 @@ def _normalize_vispt_mode(mode: Optional[str]) -> str:
     resolved = _VISPT_MODE_ALIASES.get(normalized)
     if resolved is None:
         raise ValueError(f"unsupported mode={mode!r}")
+    return resolved
+
+
+def _normalize_route_policy(route_policy: Optional[str]) -> Optional[str]:
+    if route_policy is None:
+        return None
+    normalized = str(route_policy).strip().lower().replace("-", "_")
+    resolved = _ROUTE_POLICY_ALIASES.get(normalized)
+    if resolved is None:
+        raise ValueError(f"unsupported route_policy={route_policy!r}")
+    return resolved
+
+
+def _normalize_route_objective(
+    route_objective: Optional[str],
+    mode: str,
+) -> str:
+    if route_objective is None:
+        if mode == _VISPT_MODE_VRF:
+            return _ROUTE_OBJECTIVE_VRF
+        return _ROUTE_OBJECTIVE_SIZE
+    normalized = str(route_objective).strip().lower().replace("-", "_")
+    resolved = _ROUTE_OBJECTIVE_ALIASES.get(normalized)
+    if resolved is None:
+        raise ValueError(f"unsupported route_objective={route_objective!r}")
     return resolved
 
 
@@ -670,6 +726,7 @@ class TreeAwareISPParameters:
     max_g_bit: int
     partition_num: int
     aux_t: Optional[Mapping[str, Any]] = None
+    route_policy: Optional[str] = None
     size_threshold: Optional[int | float] = None
     vrf_threshold: Optional[int | float] = None
     mode: str = _VISPT_MODE_LEGACY
@@ -695,6 +752,7 @@ class TreeAwareISPParameters:
     tree_threshold: Optional[int] = None
     link_threshold: int = -1
     hash_name: str = DEFAULT_HASH_NAME
+    route_objective: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.hash_len <= 0:
@@ -712,6 +770,7 @@ class TreeAwareISPParameters:
                 f"unsupported hash_name={self.hash_name!r}; choose from {sorted(SUPPORTED_HASHES)}"
             )
         resolved_mode = _normalize_vispt_mode(self.mode)
+        resolved_route_policy = _normalize_route_policy(self.route_policy)
         resolved_score_bound = _normalize_score_bound(self.score_bound)
         if resolved_score_bound is None and self.tree_threshold is not None and resolved_mode != _VISPT_MODE_LEGACY:
             resolved_score_bound = self.tree_threshold
@@ -737,6 +796,16 @@ class TreeAwareISPParameters:
             self.aux_t if self.aux_t is not None else self.aux_mode
         )
         aux_t_map = {key: value for key, value in canonical_aux_t}
+        raw_route_objective = self.route_objective
+        if raw_route_objective is None:
+            raw_route_objective = aux_t_map.get(
+                "route_objective",
+                aux_t_map.get("objective", aux_t_map.get("obj")),
+            )
+        resolved_route_objective = _normalize_route_objective(
+            None if raw_route_objective is None else str(raw_route_objective),
+            resolved_mode,
+        )
         entropy_floor_raw = aux_t_map.get("entropy_floor", aux_t_map.get("h_min", 0))
         entropy_floor = int(entropy_floor_raw)
         if entropy_floor < 0:
@@ -765,7 +834,9 @@ class TreeAwareISPParameters:
         if resolved_window_radius_l < 0 or resolved_window_radius_u < 0:
             raise ValueError("window radii must be non-negative")
         low = avg_floor - resolved_window_radius_l
-        high = min(avg_ceil + resolved_window_radius_u, self.partition_num)
+        # Cap away from the fully saturated count so the public window matches
+        # the ValStrictISPT definition used in the paper.
+        high = min(avg_ceil + resolved_window_radius_u, self.partition_num - 1)
         pattern_family = _normalize_pattern_family(self.pattern_family, max_g_value)
         dy_shape_family_source = aux_t_map.get("dy_shape_family")
         if dy_shape_family_source is None:
@@ -794,17 +865,29 @@ class TreeAwareISPParameters:
             if dy_shape_family is None
             else tuple(_row_local_tree_score(row, max_g_value) for row in dy_shape_family)
         )
+        dy_shape_local_cost_pairs = (
+            None
+            if dy_shape_family is None
+            else tuple(_row_local_tree_cost_pair(row, max_g_value) for row in dy_shape_family)
+        )
         ordered_dy_shape_indices = (
             ()
-            if dy_shape_family is None or dy_shape_index_by_row is None or dy_shape_local_scores is None
+            if (
+                dy_shape_family is None
+                or dy_shape_index_by_row is None
+                or dy_shape_local_scores is None
+                or dy_shape_local_cost_pairs is None
+            )
             else tuple(
                 sorted(
                     range(len(dy_shape_family)),
-                    key=lambda index: (
-                        1 if not dy_shape_family[index] else 0,
+                    key=lambda index: _profile_shape_sort_key(
+                        dy_shape_family[index],
                         dy_shape_local_scores[index],
-                        -len(dy_shape_family[index]),
+                        dy_shape_local_cost_pairs[index],
                         index,
+                        resolved_route_objective,
+                        aux_t_map,
                     ),
                 )
             )
@@ -859,16 +942,41 @@ class TreeAwareISPParameters:
             aux_t_map.get("shape_profiles"),
             Mapping,
         )
-        if has_profile_rule or resolved_mode in {_VISPT_MODE_SIZE, _VISPT_MODE_VRF} or self.aux_t is not None:
-            routing_strategy = _VISPT_MODE_SIZE
+        if resolved_route_policy == _ROUTE_POLICY_PROFILE:
+            routing_strategy = _ROUTE_POLICY_PROFILE
+        elif resolved_route_policy == _ROUTE_POLICY_FULL_SUPPORT:
+            routing_strategy = _ROUTE_POLICY_FULL_SUPPORT
+        elif (
+            has_profile_rule
+            or resolved_mode in {_VISPT_MODE_SIZE, _VISPT_MODE_VRF}
+            or self.aux_t is not None
+            or self.route_objective is not None
+        ):
+            routing_strategy = _ROUTE_POLICY_PROFILE
         else:
             routing_strategy = _VISPT_MODE_LEGACY
+        if routing_strategy == _ROUTE_POLICY_FULL_SUPPORT and (
+            self.prefix_limit != 0
+            or bt_block_size != 0
+            or self.bt_loss_bound != 0
+        ):
+            raise ValueError(
+                "route_policy='full_support' is incompatible with prefix extraction or BT routing options"
+            )
         compatibility_score_name: Optional[str] = None
         compatibility_score_bound: Optional[int] = None
-        if resolved_size_threshold is not None and resolved_vrf_threshold is None:
+        if (
+            compatibility_score_name is None
+            and resolved_size_threshold is not None
+            and resolved_vrf_threshold is None
+        ):
             compatibility_score_name = _SCORE_NAME_SIZE
             compatibility_score_bound = resolved_size_threshold
-        elif resolved_vrf_threshold is not None and resolved_size_threshold is None:
+        elif (
+            compatibility_score_name is None
+            and resolved_vrf_threshold is not None
+            and resolved_size_threshold is None
+        ):
             compatibility_score_name = _SCORE_NAME_VRF
             compatibility_score_bound = resolved_vrf_threshold
         object.__setattr__(self, "_block_num", block_num)
@@ -879,6 +987,8 @@ class TreeAwareISPParameters:
             "aux_t",
             None if not canonical_aux_t else dict(aux_t_map),
         )
+        object.__setattr__(self, "route_policy", routing_strategy)
+        object.__setattr__(self, "route_objective", resolved_route_objective)
         object.__setattr__(
             self,
             "aux_mode",
@@ -890,6 +1000,8 @@ class TreeAwareISPParameters:
         object.__setattr__(self, "score_bound", compatibility_score_bound)
         object.__setattr__(self, "_mode", resolved_mode)
         object.__setattr__(self, "_routing_strategy", routing_strategy)
+        object.__setattr__(self, "_route_policy", routing_strategy)
+        object.__setattr__(self, "_route_objective", resolved_route_objective)
         object.__setattr__(self, "_aux_t", canonical_aux_t)
         object.__setattr__(self, "_aux_t_map", dict(aux_t_map))
         object.__setattr__(self, "_entropy_floor", entropy_floor)
@@ -903,7 +1015,8 @@ class TreeAwareISPParameters:
         object.__setattr__(
             self,
             "_score_guard_enabled",
-            resolved_size_threshold is not None or resolved_vrf_threshold is not None,
+            resolved_size_threshold is not None
+            or resolved_vrf_threshold is not None,
         )
         object.__setattr__(self, "_leaf_universe_size", leaf_universe_size)
         object.__setattr__(self, "_leaf_universe_full_mask", leaf_universe_full_mask)
@@ -978,6 +1091,7 @@ class TreeAwareISPParameters:
         _append_encoded_nonnegative_int(parameter_material, self.partition_num)
         _append_encoded_bytes(parameter_material, resolved_mode.encode("ascii"))
         _append_encoded_bytes(parameter_material, routing_strategy.encode("ascii"))
+        _append_encoded_bytes(parameter_material, resolved_route_objective.encode("ascii"))
         _append_encoded_bytes(parameter_material, _encoded_aux_mode_material(canonical_aux_t))
         _append_encoded_bytes(
             parameter_material,
@@ -1498,6 +1612,37 @@ def _xof_from_seed_material(
     hash_name: str = DEFAULT_HASH_NAME,
 ) -> HashXOF:
     return HashXOF(seed_material=seed_material, hash_name=hash_name)
+
+
+def _randbelow_from_seed_material_once(
+    seed_material: bytes,
+    hash_name: str,
+    bound: int,
+) -> int:
+    if bound <= 0:
+        raise ValueError("bound must be positive")
+    if hash_name == "shake_128":
+        fast_digest = hashlib.shake_128(seed_material).digest
+    else:
+        # Match HashXOF: SHA3-backed samplers expand with SHAKE256.
+        fast_digest = hashlib.shake_256(seed_material).digest
+
+    byte_len = max(1, (bound.bit_length() + 7) // 8)
+    upper = 1 << (8 * byte_len)
+    threshold = upper - (upper % bound)
+    buffer = b""
+    buffer_len = 0
+    offset = 0
+    while True:
+        end = offset + byte_len
+        if buffer_len < end:
+            target = max(end, 32 if buffer_len < 32 else 2 * buffer_len)
+            buffer = fast_digest(target)
+            buffer_len = target
+        candidate = int.from_bytes(buffer[offset:end], "big")
+        offset = end
+        if candidate < threshold:
+            return candidate % bound
 
 
 def _binomial_table(universe_size: int) -> tuple[tuple[int, ...], ...]:
@@ -2417,6 +2562,37 @@ def verify_score(
     return params._verify_score_base - selected_nodes + complement_nodes
 
 
+def leaf_index_set(
+    groups: Sequence[Sequence[int]],
+    params: TreeAwareISPParameters,
+) -> tuple[int, ...]:
+    """Return MTLeafIndSet(Groups) in increasing order over the actual leaf universe."""
+
+    selected_indices: list[int] = []
+    max_g_value = params.max_g_value
+    for group_index, subgroup in enumerate(groups):
+        base = group_index * max_g_value
+        for block_value in subgroup:
+            selected_indices.append(base + int(block_value))
+    selected_indices.sort()
+    return tuple(selected_indices)
+
+
+def complement_leaf_index_set(
+    groups: Sequence[Sequence[int]],
+    params: TreeAwareISPParameters,
+) -> tuple[int, ...]:
+    """Return the increasing complement of MTLeafIndSet(Groups)."""
+
+    selected = set(leaf_index_set(groups, params))
+    leaf_universe_size = params.partition_num * params.max_g_value
+    return tuple(
+        leaf_index
+        for leaf_index in range(leaf_universe_size)
+        if leaf_index not in selected
+    )
+
+
 def score_guard(
     groups: Sequence[Sequence[int]],
     params: TreeAwareISPParameters,
@@ -2465,6 +2641,23 @@ def score_guard(
         ):
             return False
     return True
+
+
+def score_guard_t(
+    groups: Sequence[Sequence[int]],
+    params: TreeAwareISPParameters,
+    *,
+    size_threshold: Optional[int | float] = None,
+    vrf_threshold: Optional[int | float] = None,
+) -> bool:
+    """Chapter-aligned alias for the dual tree-aware abort guard."""
+
+    return score_guard(
+        groups,
+        params,
+        size_threshold=size_threshold,
+        vrf_threshold=vrf_threshold,
+    )
 
 
 def tree_score(groups: Sequence[Sequence[int]], params: TreeAwareISPParameters) -> int:
@@ -2576,9 +2769,43 @@ def _normalize_shape_profile(
 
 @lru_cache(maxsize=None)
 def _row_local_tree_score(row: tuple[int, ...], max_g_value: int) -> int:
+    selected_nodes, complement_nodes = _row_local_tree_cost_pair(row, max_g_value)
+    return selected_nodes + complement_nodes
+
+
+@lru_cache(maxsize=None)
+def _row_local_tree_cost_pair(row: tuple[int, ...], max_g_value: int) -> tuple[int, int]:
     mask = _pattern_to_mask(row)
     full_mask = (1 << max_g_value) - 1
-    return _node_cover_count(mask, max_g_value) + _node_cover_count(full_mask ^ mask, max_g_value)
+    return (
+        _node_cover_count(mask, max_g_value),
+        _node_cover_count(full_mask ^ mask, max_g_value),
+    )
+
+
+def _profile_shape_sort_key(
+    row: tuple[int, ...],
+    local_size_score: int,
+    local_cost_pair: tuple[int, int],
+    index: int,
+    route_objective: str,
+    aux_t: Mapping[str, Any],
+) -> tuple[float, ...]:
+    selected_nodes, complement_nodes = local_cost_pair
+    if route_objective == _ROUTE_OBJECTIVE_VRF:
+        return (
+            complement_nodes - selected_nodes,
+            complement_nodes,
+            -selected_nodes,
+            1 if not row else 0,
+            index,
+        )
+    return (
+        1 if not row else 0,
+        local_size_score,
+        -len(row),
+        index,
+    )
 
 
 def _profile_support_bits_from_usage(
@@ -2741,7 +2968,46 @@ def _profile_rule_cache_key(
         params._dy_shape_family,
         params._entropy_floor,
         params._profile_rule_name,
+        params._route_objective,
     )
+
+
+def _profile_rule_base_cache_key(
+    counts: Sequence[int],
+    params: TreeAwareISPParameters,
+) -> tuple[object, ...]:
+    return (
+        tuple(int(count) for count in counts),
+        params.partition_num,
+        params.max_g_value,
+        params._dy_shape_family,
+        params._profile_rule_name,
+        params._route_objective,
+    )
+
+
+def _sparse_residual_profile(
+    counts: Sequence[int],
+    partition_num: int,
+) -> Optional[tuple[tuple[int, ...], ...]]:
+    if partition_num < 0:
+        return None
+    if partition_num == 0:
+        return () if not any(counts) else None
+    if any(int(count) < 0 or int(count) > partition_num for count in counts):
+        return None
+
+    rows: list[list[int]] = [[] for _ in range(partition_num)]
+    cursor = 0
+    for value, raw_count in enumerate(counts):
+        count = int(raw_count)
+        if count <= 0:
+            continue
+        for offset in range(count):
+            row_index = (cursor + offset) % partition_num
+            rows[row_index].append(value)
+        cursor = (cursor + count) % partition_num
+    return tuple(tuple(row) for row in rows)
 
 
 def _profile_rule_profile(
@@ -2755,6 +3021,8 @@ def _profile_rule_profile(
     family = params._dy_shape_family
     if family is None:
         return None
+    if params._profile_rule_name in {"sparse_residual", "residual_fallback"}:
+        return _sparse_residual_profile(counts, params.partition_num)
     if params._profile_rule_name not in {"dyadic_greedy", "greedy", "default"}:
         return None
 
@@ -2771,6 +3039,16 @@ def _profile_rule_profile(
     empty_row = ()
     empty_available = params._dy_shape_empty_available
     total_shape_types = params._dy_shape_family_size
+    if (
+        _optimistic_profile_support_bits(
+            tuple(0 for _ in range(total_shape_types)),
+            params.partition_num,
+            total_shape_types,
+        )
+        < params._entropy_floor
+    ):
+        _PROFILE_RULE_CACHE[cache_key] = None
+        return None
 
     @lru_cache(maxsize=None)
     def search(
@@ -2855,17 +3133,33 @@ def _profile_route_plan(
     params: TreeAwareISPParameters,
 ) -> Optional[_ProfileRoutePlan]:
     cache_key = _profile_rule_cache_key(counts, params)
+    base_key = _profile_rule_base_cache_key(counts, params)
     cached = _PROFILE_ROUTE_PLAN_CACHE.get(cache_key)
     if cached is not None or cache_key in _PROFILE_ROUTE_PLAN_CACHE:
         return cached
 
+    cached_success = _PROFILE_ROUTE_PLAN_SUCCESS_CACHE.get(base_key)
+    if cached_success is not None and cached_success.support_bits >= params._entropy_floor:
+        _PROFILE_ROUTE_PLAN_CACHE[cache_key] = cached_success
+        return cached_success
+    fail_floor = _PROFILE_ROUTE_PLAN_FAIL_FLOOR_CACHE.get(base_key)
+    if fail_floor is not None and params._entropy_floor >= fail_floor:
+        _PROFILE_ROUTE_PLAN_CACHE[cache_key] = None
+        return None
+
     profile = _profile_rule_profile(counts, params)
     if profile is None:
+        existing_fail_floor = _PROFILE_ROUTE_PLAN_FAIL_FLOOR_CACHE.get(base_key)
+        if existing_fail_floor is None or params._entropy_floor < existing_fail_floor:
+            _PROFILE_ROUTE_PLAN_FAIL_FLOOR_CACHE[base_key] = params._entropy_floor
         _PROFILE_ROUTE_PLAN_CACHE[cache_key] = None
         return None
 
     dy_shape_family_set = params._dy_shape_family_set
-    if dy_shape_family_set is not None:
+    if (
+        dy_shape_family_set is not None
+        and params._profile_rule_name not in {"sparse_residual", "residual_fallback"}
+    ):
         for row in profile:
             if row not in dy_shape_family_set:
                 _PROFILE_ROUTE_PLAN_CACHE[cache_key] = None
@@ -2894,6 +3188,9 @@ def _profile_route_plan(
         ordered_rows=ordered_rows,
         ordered_row_counts=tuple(multiplicities[row] for row in ordered_rows),
     )
+    cached_success = _PROFILE_ROUTE_PLAN_SUCCESS_CACHE.get(base_key)
+    if cached_success is None or plan.support_bits > cached_success.support_bits:
+        _PROFILE_ROUTE_PLAN_SUCCESS_CACHE[base_key] = plan
     _PROFILE_ROUTE_PLAN_CACHE[cache_key] = plan
     return plan
 
@@ -3006,7 +3303,7 @@ def _profile_canonical_row_order(
     return tuple(ordered)
 
 
-def _route_vrf(
+def _route_full_support(
     partition_value: PartitionValueInput,
     counts: Sequence[int],
     params: TreeAwareISPParameters,
@@ -3172,9 +3469,11 @@ def route_support(
     counts: Sequence[int],
     params: TreeAwareISPParameters,
 ) -> int:
-    if params._routing_strategy == _VISPT_MODE_SIZE:
+    if params._routing_strategy == _ROUTE_POLICY_PROFILE:
         plan = _profile_route_plan(counts, params)
         return 0 if plan is None else plan.support
+    if params._routing_strategy == _ROUTE_POLICY_FULL_SUPPORT:
+        return _support_product(params.partition_num, counts)
     extracted = tree_extract(counts, params)
     if extracted is None:
         return 0
@@ -3197,9 +3496,19 @@ def _ind_route(
     xof_seed_material: Optional[bytes],
 ) -> Groups:
     groups: Groups = [[] for _ in range(residual_rows)]
-    binomial_table = _binomial_table(residual_rows)
-    for value, count in enumerate(residual_vec):
-        subset_count = binomial_table[residual_rows][count]
+    sample_base_params = (
+        params.sample_base_params
+        if residual_rows == params.partition_num
+        else _sample_base_parameters(residual_rows)
+    )
+    binomial_table, subset_count_row, _byte_lengths, _thresholds, direct_unrank_rows, _unpackers = (
+        sample_base_params
+    )
+    subset_decode_tables = _subset_decode_tables(residual_rows)
+    counting = counters_enabled()
+    for value, raw_count in enumerate(residual_vec):
+        count = int(raw_count)
+        subset_count = subset_count_row[count]
         if rng is not None:
             rank = rng.randrange(subset_count)
         else:
@@ -3211,14 +3520,57 @@ def _ind_route(
                 xof_seed_material,
                 value=value,
             )
-            rank = HashXOF(seed_material, params.hash_name).randbelow(subset_count)
-        for position in _decode_subset_rank_positions(
-            rank,
-            residual_rows,
-            count,
-            binomial_table,
-        ):
-            groups[position].append(value)
+            if counting:
+                rank = HashXOF(seed_material, params.hash_name).randbelow(subset_count)
+            else:
+                rank = _randbelow_from_seed_material_once(
+                    seed_material,
+                    params.hash_name,
+                    subset_count,
+                )
+        if subset_decode_tables and count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            for position in subset_decode_tables[count][rank]:
+                groups[position].append(value)
+            continue
+        if count == 1:
+            groups[rank].append(value)
+            continue
+        if count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            _unrank_small_subset_into_groups(
+                groups,
+                value,
+                rank,
+                residual_rows,
+                count,
+                binomial_table,
+            )
+            continue
+        if residual_rows - count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            _append_value_excluding_small_subset(
+                groups,
+                value,
+                rank,
+                residual_rows,
+                count,
+                subset_count,
+                binomial_table,
+            )
+            continue
+
+        remaining = count
+        current_rank = rank
+        include_row = direct_unrank_rows[remaining]
+        for position in range(residual_rows):
+            if remaining == 0:
+                break
+            include_count = include_row[position]
+            if current_rank < include_count:
+                groups[position].append(value)
+                remaining -= 1
+                if remaining:
+                    include_row = direct_unrank_rows[remaining]
+            else:
+                current_rank -= include_count
     return groups
 
 
@@ -3714,7 +4066,7 @@ def tree_sampler(
     Tree-aware sampler with profile routing and optional public score guards.
     """
 
-    if params._routing_strategy == _VISPT_MODE_SIZE:
+    if params._routing_strategy == _ROUTE_POLICY_PROFILE:
         groups = _route_size(
             partition_value,
             counts,
@@ -3724,6 +4076,17 @@ def tree_sampler(
         )
         if groups is None:
             return None
+        if params._score_guard_enabled and not score_guard(groups, params):
+            return None
+        return groups
+    if params._routing_strategy == _ROUTE_POLICY_FULL_SUPPORT:
+        groups = _route_full_support(
+            partition_value,
+            counts,
+            params,
+            rng,
+            xof_seed_material,
+        )
         if params._score_guard_enabled and not score_guard(groups, params):
             return None
         return groups
@@ -3809,6 +4172,50 @@ def treeaware_isp(
     )
 
 
+def route_size(
+    partition_value: PartitionValueInput,
+    params: TreeAwareISPParameters,
+    rng: Optional[Random] = None,
+    xof_seed_material: Optional[bytes] = None,
+) -> Optional[Groups]:
+    """
+    Public helper for the routing layer RouteSize in the paper.
+
+    This function performs the histogram window checks and routing step, but it
+    does not apply the tree-aware abort guard. The full ValStrictISPT sampler is
+    `treeaware_isp(...)`, which additionally applies `score_guard_t(...)`.
+    """
+
+    hash_len = params.hash_len
+    max_g_bit = params.max_g_bit
+    max_g_value = params.max_g_value
+    counts = _multiplicity_profile_from_partition_value(
+        partition_value=partition_value,
+        hash_len=hash_len,
+        max_g_bit=max_g_bit,
+        max_g_value=max_g_value,
+    )
+    if not params._window_valid:
+        return None
+    low = params._window_low
+    high = params._window_high
+    for count in counts:
+        if count < low or count > high:
+            return None
+    return tree_sampler(
+        partition_value=partition_value,
+        counts=counts,
+        params=replace(
+            params,
+            size_threshold=None,
+            vrf_threshold=None,
+            score_bound=None,
+        ),
+        rng=rng,
+        xof_seed_material=xof_seed_material,
+    )
+
+
 def is_strictly_increasing(values: Sequence[int]) -> bool:
     return all(left < right for left, right in zip(values, values[1:]))
 
@@ -3845,7 +4252,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=(_VISPT_MODE_LEGACY, _VISPT_MODE_SIZE, _VISPT_MODE_VRF),
         default=_VISPT_MODE_LEGACY,
-        help="Deprecated compatibility switch; tree-aware ValStrictISPT routing is profile-based.",
+        help="Compatibility shorthand for the route objective and score semantics; prefer --route-policy with --aux-t in new ValStrictISPT configurations.",
+    )
+    parser.add_argument(
+        "--route-policy",
+        default=None,
+        help=(
+            "Optional routing policy override: 'profile', 'ProfileMode', "
+            "'full_support', or 'FullSupportMode'. Omit to infer the policy "
+            "from the public ValStrictISPT parameters."
+        ),
     )
     parser.add_argument(
         "--aux-mode",
@@ -4001,6 +4417,7 @@ def _main() -> int:
         max_g_bit=args.max_g_bit,
         partition_num=args.partition_num,
         aux_t=aux_t,
+        route_policy=args.route_policy,
         size_threshold=_parse_score_bound_arg(args.size_threshold),
         vrf_threshold=_parse_score_bound_arg(args.vrf_threshold),
         mode=args.mode,
@@ -4037,14 +4454,14 @@ def _main() -> int:
     low, high = window_bounds(params)
     groups = treeaware_isp(partition_value, params, rng=rng)
     route_info = None
-    if params._routing_strategy == _VISPT_MODE_VRF:
+    if params._routing_strategy == _ROUTE_POLICY_FULL_SUPPORT:
         route_info = {
             "mode": params._routing_strategy,
             "support": route_support(counts, params),
             "size_threshold": params.size_threshold,
             "vrf_threshold": params.vrf_threshold,
         }
-    elif params._routing_strategy == _VISPT_MODE_SIZE:
+    elif params._routing_strategy == _ROUTE_POLICY_PROFILE:
         route_info = {
             "mode": params._routing_strategy,
             "support": route_support(counts, params),
@@ -4076,6 +4493,7 @@ def _main() -> int:
     output = {
         "hash_name": params.hash_name,
         "mode": params.mode,
+        "route_policy": params.route_policy,
         "routing_strategy": params._routing_strategy,
         "aux_t": params.aux_t,
         "aux_mode": params.aux_mode,

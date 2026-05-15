@@ -12,14 +12,20 @@ from treeaware_isp import (
     _laminar_count_with_empty,
     _laminar_nonempty_count,
     _multiplicity_profile_from_partition_value,
+    _randbelow_from_seed_material_once,
+    _route_seed_material,
     _sample_uniform_subset,
     blk,
+    complement_leaf_index_set,
+    leaf_index_set,
     multiplicity_profile,
+    route_size,
     sample_base,
     shape_guard,
     shape_statistics,
     route_support,
     score_guard,
+    score_guard_t,
     score_value,
     tree_extract,
     tree_cost_pair,
@@ -129,6 +135,47 @@ def _reference_sample_groups_from_seed_material(
     return groups
 
 
+def _reference_ind_route_groups(
+    partition_value: str,
+    counts: list[int],
+    params: TreeAwareISPParameters,
+    seed_material: bytes,
+) -> list[list[int]]:
+    groups: list[list[int]] = [[] for _ in range(params.partition_num)]
+
+    def decode_subset_rank(rank: int, subset_size: int, universe_size: int) -> list[int]:
+        positions: list[int] = []
+        remaining = subset_size
+        current_rank = rank
+        for position in range(universe_size):
+            if remaining == 0:
+                break
+            include_count = comb(universe_size - position - 1, remaining - 1)
+            if current_rank < include_count:
+                positions.append(position)
+                remaining -= 1
+            else:
+                current_rank -= include_count
+        return positions
+
+    for value, count in enumerate(counts):
+        value_seed = _route_seed_material(
+            b"ind",
+            partition_value,
+            counts,
+            params,
+            seed_material,
+            value=value,
+        )
+        rank = HashXOF(value_seed, params.hash_name).randbelow(
+            comb(params.partition_num, count)
+        )
+        for position in decode_subset_rank(rank, count, params.partition_num):
+            groups[position].append(value)
+
+    return groups
+
+
 class TreeAwareISPTests(unittest.TestCase):
     def test_isp_parameters_keep_symmetric_window_radius(self) -> None:
         params = TreeAwareISPParameters(
@@ -139,7 +186,7 @@ class TreeAwareISPTests(unittest.TestCase):
         )
 
         self.assertEqual(params.window_radius, 1)
-        self.assertEqual(window_bounds(params), (1, 3))
+        self.assertEqual(window_bounds(params), (1, 2))
 
     def test_treeaware_isp_applies_window_guard(self) -> None:
         params = TreeAwareISPParameters(
@@ -151,6 +198,16 @@ class TreeAwareISPTests(unittest.TestCase):
 
         self.assertIsNotNone(treeaware_isp("00011011", params))
         self.assertIsNone(treeaware_isp("00000000", params))
+
+    def test_treeaware_isp_caps_window_high_away_from_partition_num(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=16,
+            max_g_bit=2,
+            partition_num=3,
+            window_radius=1,
+        )
+
+        self.assertIsNone(treeaware_isp("0000000101011011", params))
 
     def test_default_prefix_dict_matches_tree_first_examples(self) -> None:
         self.assertEqual(
@@ -188,6 +245,15 @@ class TreeAwareISPTests(unittest.TestCase):
         xof = HashXOF(seed_material)
 
         self.assertEqual([xof.randbelow(bound) for bound in bounds], reference)
+
+    def test_one_shot_randbelow_matches_fresh_hash_xof(self) -> None:
+        seed_material = b"treeaware-isp/randbelow-once"
+        for bound in [1, 2, 7, 31, 32, 257, 4099]:
+            with self.subTest(bound=bound):
+                self.assertEqual(
+                    _randbelow_from_seed_material_once(seed_material, "shake_256", bound),
+                    HashXOF(seed_material, "shake_256").randbelow(bound),
+                )
 
     def test_sample_uniform_subset_matches_reference_small_size(self) -> None:
         seed_material = b"treeaware-isp/subset"
@@ -402,6 +468,145 @@ class TreeAwareISPTests(unittest.TestCase):
             [1, 1, 1, 1],
         )
 
+    def test_route_objective_is_objective_parametric_profile_knob(self) -> None:
+        vrf_params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            mode="vrf",
+            window_radius=1,
+        )
+        aux_override_params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            mode="size",
+            aux_t={"route_objective": "verify_aware"},
+            window_radius=1,
+        )
+
+        self.assertEqual(vrf_params.route_objective, "vrf")
+        self.assertEqual(aux_override_params.route_objective, "vrf")
+        self.assertGreater(route_support([1, 1, 1, 1], aux_override_params), 0)
+        with self.assertRaises(ValueError):
+            TreeAwareISPParameters(
+                hash_len=8,
+                max_g_bit=2,
+                partition_num=4,
+                route_objective="balanced",
+                window_radius=1,
+            )
+
+    def test_explicit_full_support_route_policy_overrides_profile_inference(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            mode="vrf",
+            route_policy="full_support",
+            aux_t={"profile_rule": "dyadic_greedy", "entropy_floor": 8},
+            window_radius=1,
+        )
+
+        groups = treeaware_isp("00011011", params)
+
+        self.assertIsNotNone(groups)
+        self.assertEqual(route_support([1, 1, 1, 1], params), 256)
+        self.assertEqual(
+            multiplicity_profile([value for group in groups or [] for value in group], params.max_g_value),
+            [1, 1, 1, 1],
+        )
+
+    def test_chapter_route_policy_aliases_are_accepted(self) -> None:
+        profile_params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            route_policy="ProfileMode",
+            window_radius=1,
+        )
+        full_params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            route_policy="FullSupportMode",
+            window_radius=1,
+        )
+
+        self.assertEqual(profile_params.route_policy, "profile")
+        self.assertEqual(full_params.route_policy, "full_support")
+
+    def test_full_support_route_policy_preserves_independent_route_transcript(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            route_policy="full_support",
+            window_radius=1,
+        )
+        partition_value = "00011011"
+        seed_material = b"treeaware-isp/full-support-seed"
+        counts = _multiplicity_profile_from_partition_value(
+            partition_value,
+            params.hash_len,
+            params.max_g_bit,
+            params.max_g_value,
+        )
+
+        self.assertEqual(
+            treeaware_isp(
+                partition_value,
+                params,
+                xof_seed_material=seed_material,
+            ),
+            _reference_ind_route_groups(partition_value, counts, params, seed_material),
+        )
+
+    def test_full_support_route_policy_preserves_independent_route_transcript_varied_counts(self) -> None:
+        counts = [0, 1, 4, 5, 5, 3, 2, 2]
+        partition_value = "".join(
+            f"{value:03b}"
+            for value, count in enumerate(counts)
+            for _ in range(count)
+        )
+        params = TreeAwareISPParameters(
+            hash_len=len(partition_value),
+            max_g_bit=3,
+            partition_num=11,
+            route_policy="full_support",
+            window_radius=2,
+        )
+        seed_material = b"treeaware-isp/full-support-varied"
+
+        self.assertEqual(
+            treeaware_isp(
+                partition_value,
+                params,
+                xof_seed_material=seed_material,
+            ),
+            _reference_ind_route_groups(partition_value, counts, params, seed_material),
+        )
+
+    def test_full_support_route_policy_rejects_prefix_or_bt_shortcuts(self) -> None:
+        with self.assertRaises(ValueError):
+            TreeAwareISPParameters(
+                hash_len=8,
+                max_g_bit=2,
+                partition_num=4,
+                route_policy="full_support",
+                prefix_limit=1,
+                window_radius=1,
+            )
+        with self.assertRaises(ValueError):
+            TreeAwareISPParameters(
+                hash_len=8,
+                max_g_bit=2,
+                partition_num=4,
+                route_policy="full_support",
+                bt_block_size=2,
+                window_radius=1,
+            )
+
     def test_entropy_floor_can_force_more_diverse_profile(self) -> None:
         params = TreeAwareISPParameters(
             hash_len=8,
@@ -425,6 +630,40 @@ class TreeAwareISPTests(unittest.TestCase):
 
         self.assertIsNone(treeaware_isp("00011011", params))
 
+    def test_route_size_exposes_routing_layer_without_score_abort(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            route_policy="FullSupportMode",
+            vrf_threshold=1,
+            window_radius=1,
+        )
+
+        groups = route_size("00011011", params)
+
+        self.assertIsNotNone(groups)
+        self.assertIsNone(treeaware_isp("00011011", params))
+
+    def test_leaf_index_helpers_match_selected_and_complement_sets(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=4,
+            window_radius=1,
+        )
+        groups = [[0], [1], [2], [3]]
+
+        self.assertEqual(leaf_index_set(groups, params), (0, 5, 10, 15))
+        self.assertEqual(
+            complement_leaf_index_set(groups, params),
+            tuple(
+                index
+                for index in range(params.partition_num * params.max_g_value)
+                if index not in {0, 5, 10, 15}
+            ),
+        )
+
     def test_profile_routing_uses_public_shape_profile_permutation(self) -> None:
         params = TreeAwareISPParameters(
             hash_len=8,
@@ -445,6 +684,24 @@ class TreeAwareISPTests(unittest.TestCase):
         self.assertEqual(
             sorted(tuple(group) for group in groups or []),
             [(0,), (1,), (2,), (3,)],
+        )
+
+    def test_sparse_residual_profile_rule_supports_verify_style_rows(self) -> None:
+        params = TreeAwareISPParameters(
+            hash_len=8,
+            max_g_bit=2,
+            partition_num=2,
+            aux_t={"profile_rule": "sparse_residual"},
+            window_radius=0,
+        )
+
+        groups = treeaware_isp("00011011", params)
+
+        self.assertIsNotNone(groups)
+        self.assertGreater(route_support([1, 1, 1, 1], params), 0)
+        self.assertEqual(
+            multiplicity_profile([value for group in groups or [] for value in group], params.max_g_value),
+            [1, 1, 1, 1],
         )
 
     def test_score_helpers_match_manual_costs(self) -> None:
@@ -479,6 +736,8 @@ class TreeAwareISPTests(unittest.TestCase):
 
         self.assertFalse(score_guard(groups, params))
         self.assertTrue(score_guard(groups, params, vrf_threshold=16))
+        self.assertFalse(score_guard_t(groups, params))
+        self.assertTrue(score_guard_t(groups, params, vrf_threshold=16))
 
     def test_multiplicity_profile_fast_path_matches_w2_reference(self) -> None:
         partition_value = bytes.fromhex("deadbeefcafebabe1122334455667788")

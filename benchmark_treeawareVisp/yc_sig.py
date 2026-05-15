@@ -253,6 +253,7 @@ class YCSigScheme:
         max_g_bit: int = 4,
         partition_size: Optional[int] = None,
         aux_t: Optional[Mapping[str, Any]] = None,
+        route_policy: Optional[str] = None,
         size_threshold: Optional[int | float] = None,
         vrf_threshold: Optional[int | float] = None,
         mode: str = "legacy",
@@ -393,6 +394,7 @@ class YCSigScheme:
             max_g_bit=max_g_bit,
             partition_num=resolved_partition_size,
             aux_t=aux_t,
+            route_policy=route_policy,
             size_threshold=size_threshold,
             vrf_threshold=vrf_threshold,
             mode=mode,
@@ -961,9 +963,11 @@ class YCSigScheme:
         return self._group_material(groups)
 
     def _uses_complement_signing(self) -> bool:
+        pm_isp = self.params.pm_ISP
         return (
-            self.params.pm_ISP.mode == "vrf"
-            or self.params.pm_ISP.vrf_threshold is not None
+            pm_isp.mode in {"size", "vrf"}
+            or pm_isp.size_threshold is not None
+            or pm_isp.vrf_threshold is not None
         )
 
     def _groups_to_signature_material(
@@ -977,7 +981,8 @@ class YCSigScheme:
             complementary_points,
         ) = self._group_material(groups)
         if self._uses_complement_signing():
-            # Verify-first signs the complement so verification expands the selected side.
+            # Tree-aware YCSig signs the complement so verification expands
+            # the selected side.
             return (
                 complementary_indices,
                 complementary_points,
