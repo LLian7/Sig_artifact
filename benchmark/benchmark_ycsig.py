@@ -42,6 +42,9 @@ class YCSigBenchmarkCase:
     keyed_hash_name: str = DEFAULT_HASH_NAME
     pprf_hash_name: str = DEFAULT_HASH_NAME
     merkle_hash_name: str = DEFAULT_HASH_NAME
+    partition_retry_mode: str = "salted"
+    partition_sampler_mode: str = "seeded"
+    partition_stream_sampler_bytes: Optional[int] = None
     setup_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -74,6 +77,9 @@ def _build_scheme(case: YCSigBenchmarkCase):
         keyed_hash_name=case.keyed_hash_name,
         pprf_hash_name=case.pprf_hash_name,
         merkle_hash_name=case.merkle_hash_name,
+        partition_retry_mode=case.partition_retry_mode,
+        partition_sampler_mode=case.partition_sampler_mode,
+        partition_stream_sampler_bytes=case.partition_stream_sampler_bytes,
         **case.setup_kwargs,
     )
     scheme = YCSig(setup.params)
@@ -300,6 +306,9 @@ def run_benchmark_case(case: YCSigBenchmarkCase) -> Dict[str, Any]:
             "compact_signature": False,
             "include_verifier_retry_cost": case.include_verifier_retry_cost,
             "retry_cost_mode": case.retry_cost_mode,
+            "partition_retry_mode": params.partition_retry_mode,
+            "partition_sampler_mode": params.partition_sampler_mode,
+            "partition_stream_sampler_bytes": params.partition_stream_sampler_bytes,
         },
         "analytic": {
             "acceptance_mode": case.acceptance_mode,
@@ -562,6 +571,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Hash backend for the Merkle tree.",
     )
     parser.add_argument(
+        "--partition-retry-mode",
+        choices=("salted", "stream"),
+        default="salted",
+        help="Use independent salted partition hashes or one per-signature partition XOF stream.",
+    )
+    parser.add_argument(
+        "--partition-sampler-mode",
+        choices=("seeded", "stream"),
+        default="seeded",
+        help="Use ValStrictISP's seeded sampler XOF or draw sampler bytes from the partition stream.",
+    )
+    parser.add_argument(
+        "--partition-stream-sampler-bytes",
+        type=int,
+        default=None,
+        help="Sampler random bytes reserved per retry chunk in partition stream mode (default: auto).",
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "text"),
         default="json",
@@ -593,6 +620,9 @@ def _single_case_from_args(args: argparse.Namespace) -> YCSigBenchmarkCase:
         keyed_hash_name=args.keyed_hash_name,
         pprf_hash_name=args.pprf_hash_name,
         merkle_hash_name=args.merkle_hash_name,
+        partition_retry_mode=args.partition_retry_mode,
+        partition_sampler_mode=args.partition_sampler_mode,
+        partition_stream_sampler_bytes=args.partition_stream_sampler_bytes,
     )
 
 

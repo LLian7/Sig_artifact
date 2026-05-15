@@ -1,0 +1,54 @@
+{
+  "parameters": {
+    "hash_len": 256,
+    "max_g_bit": 16,
+    "max_g_value": 65536,
+    "partition_num": 2,
+    "window_radius": 0,
+    "hash_name": "shake_256",
+    "accepted_samples": 64,
+    "rejected_samples": 16,
+    "repetitions": 12,
+    "random_seed": 0,
+    "cpu_frequency_hz": 3490000000.0,
+    "cpu_frequency_ghz": 3.49,
+    "window_low": 0,
+    "window_high": 1
+  },
+  "sample_pool": {
+    "candidate_attempts": 10555,
+    "accepted_samples": 64,
+    "rejected_samples": 16
+  },
+  "cycles": {
+    "profile_only": {
+      "avg_cycles": 162711.00721354166,
+      "stddev_cycles": 58972.755381676325,
+      "min_cycles": 132683.52890625,
+      "max_cycles": 330286.401875
+    },
+    "accept_check": {
+      "avg_cycles": 3478417.048997396,
+      "stddev_cycles": 53643.39638512284,
+      "min_cycles": 3408432.53796875,
+      "max_cycles": 3581830.625
+    },
+    "full_accept": {
+      "avg_cycles": 8976146.153046874,
+      "stddev_cycles": 80001.41629590829,
+      "min_cycles": 8867633.3553125,
+      "max_cycles": 9104269.6425
+    },
+    "full_reject": {
+      "avg_cycles": 1992022.7453125,
+      "stddev_cycles": 58199.87232544071,
+      "min_cycles": 1877910.97875,
+      "max_cycles": 2118165.6325
+    }
+  },
+  "ratios": {
+    "full_accept_over_profile": 55.1661888569505,
+    "full_accept_over_accept_check": 2.5805261492822202,
+    "full_reject_over_accept_check": 0.5726808249995992
+  }
+}

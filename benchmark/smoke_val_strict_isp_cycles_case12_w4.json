@@ -1,0 +1,128 @@
+[
+  {
+    "case_name": "case1",
+    "security_target": 128,
+    "max_g_value": 4,
+    "partition_num": 32,
+    "window_radius": 1,
+    "block_num": 73,
+    "hash_len": 146,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 5671.25,
+      "accept_check": 4798.75,
+      "full_accept": 57585.0,
+      "full_reject": 4798.75
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 160,
+    "max_g_value": 4,
+    "partition_num": 40,
+    "window_radius": 1,
+    "block_num": 91,
+    "hash_len": 182,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 4072.83,
+      "accept_check": 3779.67,
+      "full_accept": 66456.58,
+      "full_reject": 4798.75
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 48,
+    "window_radius": 1,
+    "block_num": 107,
+    "hash_len": 214,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 3636.58,
+      "accept_check": 3779.67,
+      "full_accept": 86813.75,
+      "full_reject": 4798.75
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 128,
+    "max_g_value": 4,
+    "partition_num": 42,
+    "window_radius": 1,
+    "block_num": 133,
+    "hash_len": 266,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 3346.91,
+      "accept_check": 3490.0,
+      "full_accept": 43914.67,
+      "full_reject": 4072.83
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 160,
+    "max_g_value": 4,
+    "partition_num": 52,
+    "window_radius": 2,
+    "block_num": 162,
+    "hash_len": 324,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 3343.42,
+      "accept_check": 3343.42,
+      "full_accept": 52932.83,
+      "full_reject": 3926.25
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 62,
+    "window_radius": 2,
+    "block_num": 193,
+    "hash_len": 386,
+    "benchmark": {
+      "accepted_samples": 1,
+      "rejected_samples": 1,
+      "repetitions": 1,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 3196.84,
+      "accept_check": 3343.42,
+      "full_accept": 73872.83,
+      "full_reject": 3926.25
+    }
+  }
+]

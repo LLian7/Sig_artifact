@@ -28,6 +28,9 @@ def _build_scheme(case: YCSigBenchmarkCase) -> YCSig:
         keyed_hash_name=case.keyed_hash_name,
         pprf_hash_name=case.pprf_hash_name,
         merkle_hash_name=case.merkle_hash_name,
+        partition_retry_mode=case.partition_retry_mode,
+        partition_sampler_mode=case.partition_sampler_mode,
+        partition_stream_sampler_bytes=case.partition_stream_sampler_bytes,
         **case.setup_kwargs,
     )
     return YCSig(setup.params)

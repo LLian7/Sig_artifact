@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from benchmark_ycsig_table_comparison import (
+    COMPARISON_CASES,
     _load_comparison_cases_from_json,
     render_text as render_comparison_text,
 )
@@ -17,6 +18,26 @@ from search_ycsig_sigsize import (
     search_rows,
 )
 from val_strict_isp import ISPParameters, val_strict_isp
+
+
+TABLE_ALL_L_WINDOWED_COMPARISON_ROWS = {
+    ("case1", 128, 4): (32, 2, 64, 128),
+    ("case1", 128, 8): (16, 2, 56, 168),
+    ("case1", 128, 16): (8, 2, 62, 248),
+    ("case1", 128, 32): (5, 1, 40, 200),
+    ("case1", 160, 4): (40, 2, 80, 160),
+    ("case1", 160, 8): (20, 2, 73, 219),
+    ("case1", 160, 16): (10, 2, 73, 292),
+    ("case1", 160, 32): (6, 2, 64, 320),
+    ("case2", 128, 4): (42, 6, 128, 256),
+    ("case2", 128, 8): (17, 3, 86, 258),
+    ("case2", 128, 16): (9, 4, 64, 256),
+    ("case2", 128, 32): (5, 2, 64, 320),
+    ("case2", 160, 4): (52, 5, 160, 320),
+    ("case2", 160, 8): (22, 6, 107, 321),
+    ("case2", 160, 16): (11, 5, 80, 320),
+    ("case2", 160, 32): (6, 2, 64, 320),
+}
 
 
 class SearchYCSigSigSizeTests(unittest.TestCase):
@@ -295,6 +316,24 @@ class SearchYCSigSigSizeTests(unittest.TestCase):
         self.assertEqual(cases[0].partition_size, 33)
         self.assertEqual(cases[0].window_radius, 1)
         self.assertEqual(cases[0].hash_len, 130)
+
+    def test_default_comparison_cases_match_table_all_l_windowed(self) -> None:
+        self.assertEqual(len(COMPARISON_CASES), len(TABLE_ALL_L_WINDOWED_COMPARISON_ROWS))
+        for case in COMPARISON_CASES:
+            expected = TABLE_ALL_L_WINDOWED_COMPARISON_ROWS[
+                (case.case_name, case.security_target, case.max_g_value)
+            ]
+            self.assertEqual(
+                (
+                    case.partition_size,
+                    case.window_radius,
+                    case.block_num,
+                    case.hash_len,
+                ),
+                expected,
+            )
+            self.assertEqual(case.hash_len % case.max_g_bit, 0)
+            self.assertEqual(case.hash_len // case.max_g_bit, case.block_num)
 
     def test_search_rows_expands_hash_len_cap_when_needed(self) -> None:
         expected = SearchRow(

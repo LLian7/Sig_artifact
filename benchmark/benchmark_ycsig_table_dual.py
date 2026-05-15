@@ -14,6 +14,7 @@ def run_paper_table_dual(
     repetitions: int,
     cpu_frequency_hz: float | None = None,
     cpu_frequency_ghz: float | None = None,
+    cycle_backend: str = "estimated",
     mode: str = "both",
 ) -> Dict[str, List[Dict[str, object]]]:
     if mode not in {"ops", "cycles", "both"}:
@@ -28,6 +29,7 @@ def run_paper_table_dual(
             repetitions=repetitions,
             cpu_frequency_hz=cpu_frequency_hz,
             cpu_frequency_ghz=cpu_frequency_ghz,
+            cycle_backend=cycle_backend,
         )
     return results
 
@@ -99,7 +101,7 @@ def _format_text(results: Dict[str, List[Dict[str, object]]]) -> str:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run YCSig paper-table benchmarks in dual mode: real primitive counts and estimated CPU cycles.",
+        description="Run YCSig paper-table benchmarks in dual mode: real primitive counts and CPU cycles measured either by nominal-frequency estimates or xctrace hardware counters.",
     )
     parser.add_argument(
         "--samples",
@@ -122,6 +124,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cpu-frequency-hz", type=float, default=None, help="Nominal CPU frequency in Hz.")
     parser.add_argument("--cpu-frequency-ghz", type=float, default=None, help="Nominal CPU frequency in GHz.")
     parser.add_argument(
+        "--cycle-backend",
+        choices=("estimated", "xctrace"),
+        default="estimated",
+        help="Cycle measurement backend. 'estimated' uses CPU time times a nominal frequency; 'xctrace' uses macOS CPU Counters.",
+    )
+    parser.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
@@ -137,6 +145,7 @@ def _main() -> int:
         repetitions=args.repetitions,
         cpu_frequency_hz=args.cpu_frequency_hz,
         cpu_frequency_ghz=args.cpu_frequency_ghz,
+        cycle_backend=args.cycle_backend,
         mode=args.mode,
     )
     if args.format == "json":

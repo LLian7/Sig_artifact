@@ -4,6 +4,7 @@ import argparse
 from functools import lru_cache
 import hashlib
 import json
+import math
 import struct
 from dataclasses import dataclass
 from random import Random
@@ -11,8 +12,110 @@ from typing import List, Optional, Sequence, Union
 
 from operation_counter import enabled as counters_enabled, increment
 
+try:
+    import _val_strict_isp_native
+except ImportError:
+    _val_strict_isp_native = None
+_NATIVE_BYTES = (
+    getattr(_val_strict_isp_native, "val_strict_isp_bytes", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_BYTES_PREFIXED_SEED = (
+    getattr(_val_strict_isp_native, "val_strict_isp_bytes_prefixed_seed", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_BYTES_DEFAULT_SEED = (
+    getattr(_val_strict_isp_native, "val_strict_isp_bytes_default_seed", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_BYTES_RANDOM = (
+    getattr(_val_strict_isp_native, "val_strict_isp_bytes_random", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_BYTES_RANDOM_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_bytes_random_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_FIND_FIRST_RANDOM_STREAM = (
+    getattr(_val_strict_isp_native, "val_strict_isp_find_first_random_stream", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_PROFILE_COUNTS = (
+    getattr(_val_strict_isp_native, "val_strict_isp_profile_counts", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_ACCEPT_CHECK = (
+    getattr(_val_strict_isp_native, "val_strict_isp_accept_check", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_ACCEPT_CHECK_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_accept_check_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_ACCEPT_CHECK_BATCH_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_accept_check_batch_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_PROFILE_COUNTS_BATCH_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_profile_counts_batch_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_ACCEPT_CHECK_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_accept_check_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_ACCEPT_CHECK_BATCH_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_accept_check_batch_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_PREPARE_PLAN = (
+    getattr(_val_strict_isp_native, "val_strict_isp_prepare_plan", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_BYTES = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_bytes", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_BYTES_PREFIXED_SEED = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_bytes_prefixed_seed", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_BYTES_DEFAULT_SEED = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_bytes_default_seed", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_BYTES_RANDOM = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_bytes_random", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+_NATIVE_W4_BYTES_RANDOM_FAST = (
+    getattr(_val_strict_isp_native, "val_strict_isp_w4_bytes_random_fast", None)
+    if _val_strict_isp_native is not None
+    else None
+)
+
 PartitionValueInput = Union[str, bytes, int]
 Groups = List[List[int]]
+GroupMasks = bytes | tuple[int, ...]
+GroupsOrMasks = Groups | GroupMasks
 MessageInput = Union[str, bytes]
 
 SUPPORTED_HASHES = {"shake_128", "shake_256", "sha3_256", "sha3_512"}
@@ -40,6 +143,103 @@ _INT_UNPACKERS = {
 }
 _SMALL_SUBSET_UNRANK_THRESHOLD = 4
 _SMALL_SUBSET_DECODE_TABLE_MAX = 32
+_NATIVE_MAX_PARTITION_NUM = 64
+_NATIVE_MAX_G_VALUE = 64
+_NATIVE_MIN_MAX_G_BIT = 2
+_NATIVE_MAX_MAX_G_BIT = 6
+_NATIVE_W4_MAX_PARTITION_NUM = _NATIVE_MAX_PARTITION_NUM
+_SPARSE_PROFILE_MIN_MAX_G_VALUE = 4096
+_STREAM_BATCH_TARGET_MISS_PROBABILITY = 0.20
+_STREAM_BATCH_MAX_CANDIDATES = 512
+
+
+def _native_bytes_supported(params: "ISPParameters") -> bool:
+    return (
+        params._window_valid
+        and _NATIVE_MIN_MAX_G_BIT <= params.max_g_bit <= _NATIVE_MAX_MAX_G_BIT
+        and params._max_g_value <= _NATIVE_MAX_G_VALUE
+        and params.partition_num <= _NATIVE_MAX_PARTITION_NUM
+    )
+
+
+def _sparse_profile_worthwhile(params: "ISPParameters") -> bool:
+    return params._max_g_value >= _SPARSE_PROFILE_MIN_MAX_G_VALUE
+
+
+@lru_cache(maxsize=None)
+def _window_accept_probability(
+    block_num: int,
+    max_g_value: int,
+    window_low: int,
+    window_high: int,
+) -> float:
+    if block_num < 0 or max_g_value <= 0 or window_low < 0 or window_high < window_low:
+        return 0.0
+    if block_num == 0:
+        return 1.0 if window_low == 0 else 0.0
+    if window_low * max_g_value > block_num or window_high * max_g_value < block_num:
+        return 0.0
+
+    high = min(window_high, block_num)
+    count_terms = [math.exp(-math.lgamma(count + 1)) for count in range(window_low, high + 1)]
+    dp = [0.0] * (block_num + 1)
+    dp[0] = 1.0
+    for _ in range(max_g_value):
+        next_dp = [0.0] * (block_num + 1)
+        for total, coefficient in enumerate(dp):
+            if coefficient == 0.0:
+                continue
+            max_count = min(high, block_num - total)
+            for count in range(window_low, max_count + 1):
+                next_dp[total + count] += coefficient * count_terms[count - window_low]
+        dp = next_dp
+
+    coefficient = dp[block_num]
+    if coefficient <= 0.0:
+        return 0.0
+    log_probability = (
+        math.lgamma(block_num + 1)
+        + math.log(coefficient)
+        - block_num * math.log(max_g_value)
+    )
+    if log_probability <= -745.0:
+        return 0.0
+    return min(1.0, max(0.0, math.exp(log_probability)))
+
+
+def _stream_batch_candidates_from_accept_probability(accept_probability: float) -> int:
+    if accept_probability <= 0.0:
+        return 32
+    if accept_probability >= 1.0:
+        return 1
+    batch = math.ceil(
+        math.log(_STREAM_BATCH_TARGET_MISS_PROBABILITY)
+        / math.log1p(-accept_probability)
+    )
+    return max(1, min(_STREAM_BATCH_MAX_CANDIDATES, batch))
+
+
+def recommended_stream_sampler_bytes(params: "ISPParameters", *, margin_bytes: int = 16) -> int:
+    """Return a safe default for drawing ValStrictISP ranks from a shared XOF stream."""
+
+    if margin_bytes < 0:
+        raise ValueError("margin_bytes must be non-negative")
+    if not params.window_valid:
+        return max(32, margin_bytes)
+
+    _, byte_lengths, _ = _subset_rank_parameters(params.partition_num)
+    low = max(0, params.window_low)
+    high = min(params.partition_num, params.window_high, params.block_num)
+    if high < low:
+        return max(32, margin_bytes)
+
+    max_rank_bytes = 1
+    for count in range(low, high + 1):
+        max_rank_bytes = max(max_rank_bytes, byte_lengths[count])
+    base_bytes = params.max_g_value * max_rank_bytes
+    if params.max_g_value <= 4:
+        return max(32, base_bytes + margin_bytes)
+    return max(64, base_bytes + 2 * margin_bytes)
 
 
 @dataclass(frozen=True)
@@ -83,6 +283,23 @@ class ISPParameters:
         object.__setattr__(self, "_window_valid", low >= 0 and high >= low)
         object.__setattr__(self, "_small_partition_fast_path", self.partition_num <= 256)
         object.__setattr__(self, "_sample_base_params", _sample_base_parameters(self.partition_num))
+        accept_probability = 0.0
+        if low >= 0 and high >= low and max_g_value <= _NATIVE_MAX_G_VALUE and block_num <= max_g_value * self.partition_num:
+            accept_probability = _window_accept_probability(block_num, max_g_value, low, high)
+        object.__setattr__(self, "_accept_probability", accept_probability)
+        object.__setattr__(
+            self,
+            "_stream_batch_candidates",
+            _stream_batch_candidates_from_accept_probability(accept_probability),
+        )
+        native_prepare = _NATIVE_PREPARE_PLAN
+        if (
+            native_prepare is not None
+            and low >= 0
+            and high >= low
+            and self.partition_num <= _NATIVE_MAX_PARTITION_NUM
+        ):
+            native_prepare(self.partition_num, low, high)
 
     @property
     def block_num(self) -> int:
@@ -121,6 +338,18 @@ class ISPParameters:
     ]:
         return self._sample_base_params
 
+    @property
+    def accept_probability(self) -> float:
+        return self._accept_probability
+
+    @property
+    def expected_retries(self) -> float:
+        return math.inf if self._accept_probability <= 0.0 else 1.0 / self._accept_probability
+
+    @property
+    def stream_batch_candidates(self) -> int:
+        return self._stream_batch_candidates
+
 
 def _to_message_bytes(message: MessageInput) -> bytes:
     if isinstance(message, bytes):
@@ -137,6 +366,31 @@ def _serialize_bitstring(bitstring: str) -> bytes:
     byte_len = (len(bitstring) + 7) // 8
     integer_value = int(bitstring, 2)
     return len(bitstring).to_bytes(8, "big") + integer_value.to_bytes(byte_len, "big")
+
+
+def _serialize_partition_value(partition_value: PartitionValueInput, hash_len: int) -> bytes:
+    byte_len = (hash_len + 7) // 8
+
+    if isinstance(partition_value, str):
+        return _serialize_bitstring(normalize_partition_value(partition_value, hash_len))
+
+    if isinstance(partition_value, bytes):
+        if len(partition_value) != byte_len:
+            raise ValueError(
+                f"bytes length mismatch: expected {byte_len} bytes for hash_len={hash_len}"
+            )
+        extra_bits = 8 * byte_len - hash_len
+        if extra_bits == 0:
+            payload = partition_value
+        else:
+            payload = (_partition_value_to_int(partition_value, hash_len)).to_bytes(byte_len, "big")
+        return hash_len.to_bytes(8, "big") + payload
+
+    if isinstance(partition_value, int):
+        integer_value = _partition_value_to_int(partition_value, hash_len)
+        return hash_len.to_bytes(8, "big") + integer_value.to_bytes(byte_len, "big")
+
+    raise TypeError("partition_value must be a bitstring, bytes, or non-negative integer")
 
 
 def _hash_bytes(data: bytes, output_bytes: int, hash_name: str) -> bytes:
@@ -279,20 +533,34 @@ def multiplicity_profile(block_values: Sequence[int], max_g_value: int) -> List[
     return counts
 
 
+def _sparse_multiplicity_profile_from_partition_value(
+    partition_value: PartitionValueInput,
+    hash_len: int,
+    max_g_bit: int,
+) -> list[tuple[int, int]]:
+    sparse_counts: dict[int, int] = {}
+    for value in blk(partition_value, hash_len, max_g_bit):
+        sparse_counts[value] = sparse_counts.get(value, 0) + 1
+    return sorted(sparse_counts.items())
+
+
 def _multiplicity_profile_from_partition_value(
     partition_value: PartitionValueInput,
     hash_len: int,
     max_g_bit: int,
     max_g_value: int,
 ) -> List[int]:
-    if isinstance(partition_value, bytes) and hash_len % 8 == 0:
+    if isinstance(partition_value, bytes):
         if max_g_bit == 2 and max_g_value == 4:
             byte_len = len(partition_value)
             mask = _W2_LOW_BIT_MASKS.get(byte_len)
             if mask is None:
                 mask = int.from_bytes(b"\x55" * byte_len, "big")
                 _W2_LOW_BIT_MASKS[byte_len] = mask
-            integer_value = int.from_bytes(partition_value, "big")
+            extra_bits = 8 * byte_len - hash_len
+            if extra_bits:
+                mask >>= extra_bits
+            integer_value = int.from_bytes(partition_value, "big") >> extra_bits
             low_bits = integer_value & mask
             high_bits = (integer_value >> 1) & mask
             not_low_bits = mask ^ low_bits
@@ -304,7 +572,7 @@ def _multiplicity_profile_from_partition_value(
                 (low_bits & high_bits).bit_count(),
             ]
 
-        if max_g_bit == 4 and max_g_value == 16:
+        if hash_len % 8 == 0 and max_g_bit == 4 and max_g_value == 16:
             counts = [0] * 16
             for byte in partition_value:
                 counts[byte >> 4] += 1
@@ -358,6 +626,22 @@ def _materialize_group_masks(
         list(_sorted_values_from_mask(group_masks[(winner_shift + offset) % partition_num]))
         for offset in range(partition_num)
     ]
+
+
+def _compress_group_masks(group_masks: Sequence[int], max_g_value: int) -> GroupMasks:
+    if max_g_value <= 8:
+        return bytes(group_masks)
+    return tuple(group_masks)
+
+
+def _group_masks_from_groups(groups: Sequence[Sequence[int]], max_g_value: int) -> GroupMasks:
+    group_masks = [0] * len(groups)
+    for group_index, subgroup in enumerate(groups):
+        mask = 0
+        for value in subgroup:
+            mask |= 1 << value
+        group_masks[group_index] = mask
+    return _compress_group_masks(group_masks, max_g_value)
 
 
 class HashXOF:
@@ -539,18 +823,18 @@ def _xof_seed_material_from_partition_value(
     hash_len: int,
     hash_name: str = DEFAULT_HASH_NAME,
 ) -> bytes:
-    bitstring = normalize_partition_value(partition_value, hash_len)
-    serialized_y = _serialize_bitstring(bitstring)
+    serialized_y = _serialize_partition_value(partition_value, hash_len)
+    hash_name_bytes = hash_name.encode("ascii")
     if counters_enabled():
         increment("isp.sample_seed_hash")
     seed_digest = _hash_bytes(
-        b"ValStrictISP/HY/" + hash_name.encode("ascii") + b"/" + serialized_y,
+        b"ValStrictISP/HY/" + hash_name_bytes + b"/" + serialized_y,
         64,
         hash_name,
     )
     seed_material = (
         b"ValStrictISP/SamplePosition/XOF/"
-        + hash_name.encode("ascii")
+        + hash_name_bytes
         + b"/"
         + seed_digest
     )
@@ -1028,6 +1312,136 @@ def _sample_base_fast_packed(
     return group_masks_local, group_firsts_local, group_lasts_local
 
 
+def _sample_base_fast_group_masks(
+    counts: Sequence[int],
+    partition_num: int,
+    hash_name: str,
+    seed_material: bytes,
+    sample_base_params: Optional[
+        tuple[
+            tuple[tuple[int, ...], ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[tuple[int, ...], ...],
+            tuple[object | None, ...],
+        ]
+    ] = None,
+) -> GroupMasks:
+    group_masks, _, _ = _sample_base_fast_packed(
+        counts=counts,
+        partition_num=partition_num,
+        hash_name=hash_name,
+        seed_material=seed_material,
+        sample_base_params=sample_base_params,
+    )
+    return _compress_group_masks(group_masks, len(counts))
+
+
+def _sample_base_fast_group_masks_from_items(
+    active_counts: Sequence[tuple[int, int]],
+    max_g_value: int,
+    partition_num: int,
+    hash_name: str,
+    seed_material: bytes,
+    sample_base_params: Optional[
+        tuple[
+            tuple[tuple[int, ...], ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[tuple[int, ...], ...],
+            tuple[object | None, ...],
+        ]
+    ] = None,
+) -> GroupMasks:
+    if hash_name == "shake_128":
+        fast_digest = hashlib.shake_128(seed_material).digest
+    else:
+        fast_digest = hashlib.shake_256(seed_material).digest
+
+    group_masks = [0] * partition_num
+    if sample_base_params is None:
+        sample_base_params = _sample_base_parameters(partition_num)
+    binomial_table, subset_count_row, byte_lengths, thresholds, direct_unrank_rows, unpackers = (
+        sample_base_params
+    )
+    subset_decode_tables = _subset_decode_tables(partition_num)
+    buffer = b""
+    buffer_len = 0
+    offset = 0
+
+    for value, count in active_counts:
+        if count > partition_num:
+            raise ValueError(
+                f"cannot place value {value}: multiplicity {count} exceeds partition_num={partition_num}"
+            )
+
+        subset_count = subset_count_row[count]
+        byte_len = byte_lengths[count]
+        threshold = thresholds[count]
+        unpack = unpackers[count]
+        while True:
+            end = offset + byte_len
+            if buffer_len < end:
+                if buffer_len < 32:
+                    target = 32 if end < 32 else end
+                else:
+                    doubled = 2 * buffer_len
+                    target = doubled if end < doubled else end
+                buffer = fast_digest(target)
+                buffer_len = target
+            if byte_len == 1:
+                candidate = buffer[offset]
+            elif unpack is not None:
+                candidate = unpack(buffer, offset)[0]
+            else:
+                candidate = int.from_bytes(buffer[offset:end], "big")
+            offset = end
+            if candidate < threshold:
+                rank = candidate % subset_count
+                break
+
+        value_bit = 1 << value
+        if subset_decode_tables and count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            for position in subset_decode_tables[count][rank]:
+                group_masks[position] |= value_bit
+            continue
+        if count == 1:
+            group_masks[rank] |= value_bit
+            continue
+        if count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            _unrank_small_subset_into_group_masks(
+                group_masks,
+                [-1] * partition_num,
+                [-1] * partition_num,
+                value,
+                value_bit,
+                rank,
+                partition_num,
+                count,
+                binomial_table,
+            )
+            continue
+
+        remaining = count
+        current_rank = rank
+        include_row = direct_unrank_rows[remaining]
+        for position in range(partition_num):
+            if remaining == 0:
+                break
+            include_count = include_row[position]
+            if current_rank < include_count:
+                group_masks[position] |= value_bit
+                remaining -= 1
+                if remaining:
+                    include_row = direct_unrank_rows[remaining]
+            else:
+                current_rank -= include_count
+
+    return _compress_group_masks(group_masks, max_g_value)
+
+
 def _sample_base_fast(
     counts: Sequence[int],
     partition_num: int,
@@ -1143,6 +1557,105 @@ def _sample_base_fast(
                 current_rank -= include_count
 
     return groups_local
+
+
+def _sample_base_fast_from_items(
+    active_counts: Sequence[tuple[int, int]],
+    partition_num: int,
+    hash_name: str,
+    seed_material: bytes,
+    sample_base_params: Optional[
+        tuple[
+            tuple[tuple[int, ...], ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            tuple[tuple[int, ...], ...],
+            tuple[object | None, ...],
+        ]
+    ] = None,
+) -> Groups:
+    if hash_name == "shake_128":
+        fast_digest = hashlib.shake_128(seed_material).digest
+    else:
+        fast_digest = hashlib.shake_256(seed_material).digest
+
+    groups: Groups = [[] for _ in range(partition_num)]
+    if sample_base_params is None:
+        sample_base_params = _sample_base_parameters(partition_num)
+    binomial_table, subset_count_row, byte_lengths, thresholds, direct_unrank_rows, unpackers = (
+        sample_base_params
+    )
+    subset_decode_tables = _subset_decode_tables(partition_num)
+    buffer = b""
+    buffer_len = 0
+    offset = 0
+
+    for value, count in active_counts:
+        if count > partition_num:
+            raise ValueError(
+                f"cannot place value {value}: multiplicity {count} exceeds partition_num={partition_num}"
+            )
+
+        subset_count = subset_count_row[count]
+        byte_len = byte_lengths[count]
+        threshold = thresholds[count]
+        unpack = unpackers[count]
+        while True:
+            end = offset + byte_len
+            if buffer_len < end:
+                if buffer_len < 32:
+                    target = 32 if end < 32 else end
+                else:
+                    doubled = 2 * buffer_len
+                    target = doubled if end < doubled else end
+                buffer = fast_digest(target)
+                buffer_len = target
+            if byte_len == 1:
+                candidate = buffer[offset]
+            elif unpack is not None:
+                candidate = unpack(buffer, offset)[0]
+            else:
+                candidate = int.from_bytes(buffer[offset:end], "big")
+            offset = end
+            if candidate < threshold:
+                rank = candidate % subset_count
+                break
+
+        if subset_decode_tables and count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            for position in subset_decode_tables[count][rank]:
+                groups[position].append(value)
+            continue
+        if count == 1:
+            groups[rank].append(value)
+            continue
+        if count <= _SMALL_SUBSET_UNRANK_THRESHOLD:
+            _unrank_small_subset_into_groups(
+                groups,
+                value,
+                rank,
+                partition_num,
+                count,
+                binomial_table,
+            )
+            continue
+
+        remaining = count
+        current_rank = rank
+        include_row = direct_unrank_rows[remaining]
+        for position in range(partition_num):
+            if remaining == 0:
+                break
+            include_count = include_row[position]
+            if current_rank < include_count:
+                groups[position].append(value)
+                remaining -= 1
+                if remaining:
+                    include_row = direct_unrank_rows[remaining]
+            else:
+                current_rank -= include_count
+
+    return groups
 
 
 def _sample_groups_from_seed_material_small(
@@ -1378,12 +1891,157 @@ def sample_base(
 sample_position = sample_base
 
 
+def _val_strict_isp_with_seed_prefix(
+    partition_value: bytes,
+    params: ISPParameters,
+    xof_seed_prefix: bytes,
+    return_group_masks: bool = False,
+) -> Optional[GroupsOrMasks]:
+    hash_len = params.hash_len
+    max_g_bit = params.max_g_bit
+    partition_num = params.partition_num
+
+    native_w4_prefixed = _NATIVE_W4_BYTES_PREFIXED_SEED
+    if (
+        not counters_enabled()
+        and params._window_valid
+        and native_w4_prefixed is not None
+        and max_g_bit == 2
+        and params._max_g_value == 4
+        and partition_num <= _NATIVE_W4_MAX_PARTITION_NUM
+    ):
+        return native_w4_prefixed(
+            partition_value,
+            hash_len,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            xof_seed_prefix,
+            params.hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    native_prefixed = _NATIVE_BYTES_PREFIXED_SEED
+    if (
+        not counters_enabled()
+        and native_prefixed is not None
+        and _native_bytes_supported(params)
+    ):
+        return native_prefixed(
+            partition_value,
+            hash_len,
+            max_g_bit,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            xof_seed_prefix,
+            params.hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    return val_strict_isp(
+        partition_value,
+        params,
+        xof_seed_material=xof_seed_prefix + partition_value,
+        return_group_masks=return_group_masks,
+    )
+
+
+def _val_strict_isp_with_random_bytes(
+    partition_value: bytes,
+    params: ISPParameters,
+    random_bytes: bytes,
+    *,
+    fallback_seed_material: Optional[bytes] = None,
+    return_group_masks: bool = False,
+) -> Optional[GroupsOrMasks]:
+    hash_len = params.hash_len
+    max_g_bit = params.max_g_bit
+    partition_num = params.partition_num
+    max_g_value = params._max_g_value
+    window_low = params._window_low
+    window_high = params._window_high
+    native_random = _NATIVE_BYTES_RANDOM_FAST or _NATIVE_BYTES_RANDOM
+    native_w4_random = _NATIVE_W4_BYTES_RANDOM_FAST or _NATIVE_W4_BYTES_RANDOM
+
+    if (
+        params._window_valid
+        and native_w4_random is not None
+        and max_g_bit == 2
+        and max_g_value == 4
+        and partition_num <= _NATIVE_W4_MAX_PARTITION_NUM
+    ):
+        if fallback_seed_material is None:
+            return native_w4_random(
+                partition_value,
+                hash_len,
+                partition_num,
+                window_low,
+                window_high,
+                random_bytes,
+                return_group_masks,
+            )
+        try:
+            return native_w4_random(
+                partition_value,
+                hash_len,
+                partition_num,
+                window_low,
+                window_high,
+                random_bytes,
+                return_group_masks,
+            )
+        except ValueError as exc:
+            if fallback_seed_material is None or "insufficient random bytes" not in str(exc):
+                raise
+
+    if (
+        native_random is not None
+        and _native_bytes_supported(params)
+    ):
+        if fallback_seed_material is None:
+            return native_random(
+                partition_value,
+                hash_len,
+                max_g_bit,
+                partition_num,
+                window_low,
+                window_high,
+                random_bytes,
+                return_group_masks,
+            )
+        try:
+            return native_random(
+                partition_value,
+                hash_len,
+                max_g_bit,
+                partition_num,
+                window_low,
+                window_high,
+                random_bytes,
+                return_group_masks,
+            )
+        except ValueError as exc:
+            if fallback_seed_material is None or "insufficient random bytes" not in str(exc):
+                raise
+
+    if fallback_seed_material is None:
+        raise ValueError("insufficient random bytes")
+    return val_strict_isp(
+        partition_value,
+        params,
+        xof_seed_material=fallback_seed_material,
+        return_group_masks=return_group_masks,
+    )
+
+
 def val_strict_isp(
     partition_value: PartitionValueInput,
     params: ISPParameters,
     rng: Optional[Random] = None,
     xof_seed_material: Optional[bytes] = None,
-) -> Optional[Groups]:
+    return_group_masks: bool = False,
+) -> Optional[GroupsOrMasks]:
     """
     Python implementation of the ValStrictISP algorithm.
 
@@ -1395,6 +2053,135 @@ def val_strict_isp(
     hash_len = params.hash_len
     max_g_bit = params.max_g_bit
     max_g_value = params._max_g_value
+    partition_num = params.partition_num
+    hash_name = params.hash_name
+    native_bytes = _NATIVE_BYTES
+    native_default_seed = _NATIVE_BYTES_DEFAULT_SEED
+    native_w4_default_seed = _NATIVE_W4_BYTES_DEFAULT_SEED
+    native_w4 = _NATIVE_W4_BYTES
+    fast_sampling = rng is None and not counters_enabled()
+
+    if (
+        fast_sampling
+        and xof_seed_material is None
+        and native_w4_default_seed is not None
+        and isinstance(partition_value, bytes)
+        and hash_name in {"shake_128", "shake_256"}
+        and params._window_valid
+        and max_g_bit == 2
+        and max_g_value == 4
+        and partition_num <= _NATIVE_W4_MAX_PARTITION_NUM
+    ):
+        return native_w4_default_seed(
+            partition_value,
+            hash_len,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    if (
+        fast_sampling
+        and xof_seed_material is None
+        and native_default_seed is not None
+        and isinstance(partition_value, bytes)
+        and hash_name in {"shake_128", "shake_256"}
+        and _native_bytes_supported(params)
+    ):
+        return native_default_seed(
+            partition_value,
+            hash_len,
+            max_g_bit,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    if (
+        fast_sampling
+        and xof_seed_material is not None
+        and params._window_valid
+        and native_w4 is not None
+        and isinstance(partition_value, bytes)
+        and max_g_bit == 2
+        and max_g_value == 4
+        and partition_num <= _NATIVE_W4_MAX_PARTITION_NUM
+    ):
+        return native_w4(
+            partition_value,
+            hash_len,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            xof_seed_material,
+            hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    if (
+        fast_sampling
+        and xof_seed_material is not None
+        and isinstance(partition_value, bytes)
+        and native_bytes is not None
+        and _native_bytes_supported(params)
+    ):
+        return native_bytes(
+            partition_value,
+            hash_len,
+            max_g_bit,
+            partition_num,
+            params.window_low,
+            params.window_high,
+            xof_seed_material,
+            hash_name == "shake_128",
+            return_group_masks,
+        )
+
+    if fast_sampling and _sparse_profile_worthwhile(params):
+        if not params._window_valid:
+            return None
+
+        active_counts = _sparse_multiplicity_profile_from_partition_value(
+            partition_value=partition_value,
+            hash_len=hash_len,
+            max_g_bit=max_g_bit,
+        )
+        low = params._window_low
+        high = params._window_high
+        if low > 0 and len(active_counts) < max_g_value:
+            return None
+        for _, count in active_counts:
+            if count < low or count > high:
+                return None
+
+        seed_material = xof_seed_material
+        if seed_material is None:
+            seed_material = _xof_seed_material_from_partition_value(
+                partition_value=partition_value,
+                hash_len=hash_len,
+                hash_name=hash_name,
+            )
+        if return_group_masks:
+            return _sample_base_fast_group_masks_from_items(
+                active_counts=active_counts,
+                max_g_value=max_g_value,
+                partition_num=partition_num,
+                hash_name=hash_name,
+                seed_material=seed_material,
+                sample_base_params=params.sample_base_params,
+            )
+        return _sample_base_fast_from_items(
+            active_counts=active_counts,
+            partition_num=partition_num,
+            hash_name=hash_name,
+            seed_material=seed_material,
+            sample_base_params=params.sample_base_params,
+        )
+
     counts = _multiplicity_profile_from_partition_value(
         partition_value=partition_value,
         hash_len=hash_len,
@@ -1411,33 +2198,77 @@ def val_strict_isp(
         if count < low or count > high:
             return None
 
-    if rng is None and not counters_enabled():
+    if fast_sampling:
         seed_material = xof_seed_material
         if seed_material is None:
             seed_material = _xof_seed_material_from_partition_value(
                 partition_value=partition_value,
                 hash_len=hash_len,
-                hash_name=params.hash_name,
+                hash_name=hash_name,
+            )
+        if (
+            native_w4 is not None
+            and isinstance(partition_value, bytes)
+            and max_g_bit == 2
+            and max_g_value == 4
+            and partition_num <= _NATIVE_W4_MAX_PARTITION_NUM
+        ):
+            return native_w4(
+                partition_value,
+                hash_len,
+                partition_num,
+                params.window_low,
+                params.window_high,
+                seed_material,
+                hash_name == "shake_128",
+                return_group_masks,
+            )
+        if (
+            native_bytes is not None
+            and isinstance(partition_value, bytes)
+            and _native_bytes_supported(params)
+        ):
+            return native_bytes(
+                partition_value,
+                hash_len,
+                max_g_bit,
+                partition_num,
+                params.window_low,
+                params.window_high,
+                seed_material,
+                hash_name == "shake_128",
+                return_group_masks,
+            )
+        if return_group_masks:
+            return _sample_base_fast_group_masks(
+                counts=counts,
+                partition_num=partition_num,
+                hash_name=hash_name,
+                seed_material=seed_material,
+                sample_base_params=params.sample_base_params,
             )
         return _sample_base_fast(
             counts=counts,
-            partition_num=params.partition_num,
-            hash_name=params.hash_name,
+            partition_num=partition_num,
+            hash_name=hash_name,
             seed_material=seed_material,
             sample_base_params=params.sample_base_params,
         )
 
-    return sample_base(
+    groups = sample_base(
         partition_value=partition_value,
         block_values=None,
-        partition_num=params.partition_num,
+        partition_num=partition_num,
         max_g_value=max_g_value,
         hash_len=hash_len,
-        hash_name=params.hash_name,
+        hash_name=hash_name,
         rng=rng,
         xof_seed_material=xof_seed_material,
         counts=counts,
     )
+    if return_group_masks:
+        return _group_masks_from_groups(groups, max_g_value)
+    return groups
 
 
 def is_strictly_increasing(values: Sequence[int]) -> bool:

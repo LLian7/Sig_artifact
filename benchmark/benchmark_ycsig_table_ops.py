@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from typing import Dict, Iterable, List, Optional
 
 from benchmark_ycsig_ops import run_operation_benchmark_case
@@ -20,7 +21,18 @@ def run_paper_table_ops(
 ) -> List[Dict[str, object]]:
     results: List[Dict[str, object]] = []
     active_rows = list(paper_rows() if rows is None else rows)
-    for row in active_rows:
+    total_rows = len(active_rows)
+    for index, row in enumerate(active_rows, start=1):
+        print(
+            (
+                f"[YCSig ops {index}/{total_rows}] {row.label} "
+                f"k={row.security_parameter} w={row.max_g_value} "
+                f"HashLen={row.hash_len} PartitionNum={row.partition_size} "
+                f"WindowRadius={row.window_radius}"
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
         case = _make_case(row, samples)
         result = run_operation_benchmark_case(case, repetitions=repetitions)
         paper_retry = None

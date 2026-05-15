@@ -1,0 +1,242 @@
+[
+  {
+    "label": "YCSig-w4-k192-H>=2k",
+    "regime": "H>=2k",
+    "security_parameter": 192,
+    "hash_len": 384,
+    "max_g_value": 4,
+    "partition_size": 62,
+    "window_radius": 3,
+    "cycles": {
+      "keygen_mcycles": 3.470805,
+      "sign_mcycles": 3.2161780899999997,
+      "verify_mcycles": 1.06997467
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.04529285430908203
+    },
+    "signature": {
+      "sig_size_obj_cycles": 138.08333333333334,
+      "sig_size_obj_ops": 138.08333333333334
+    },
+    "ops": {
+      "keygen": 738.0,
+      "sign": 537.0,
+      "verify": 206.0
+    }
+  },
+  {
+    "label": "YCSig-w4-k192-H>=k",
+    "regime": "H>=k",
+    "security_parameter": 192,
+    "hash_len": 192,
+    "max_g_value": 4,
+    "partition_size": 48,
+    "window_radius": 2,
+    "cycles": {
+      "keygen_mcycles": 2.53926467,
+      "sign_mcycles": 1.97766434,
+      "verify_mcycles": 1.17045875
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.03734874725341797
+    },
+    "signature": {
+      "sig_size_obj_cycles": 142.08333333333334,
+      "sig_size_obj_ops": 142.08333333333334
+    },
+    "ops": {
+      "keygen": 573.0,
+      "sign": 306.0,
+      "verify": 290.0
+    }
+  },
+  {
+    "label": "YCSig-w8-k192-H>=2k",
+    "regime": "H>=2k",
+    "security_parameter": 192,
+    "hash_len": 384,
+    "max_g_value": 8,
+    "partition_size": 26,
+    "window_radius": 6,
+    "cycles": {
+      "keygen_mcycles": 3.13751,
+      "sign_mcycles": 2.30587441,
+      "verify_mcycles": 1.3011906599999998
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.03714275360107422
+    },
+    "signature": {
+      "sig_size_obj_cycles": 143.08333333333334,
+      "sig_size_obj_ops": 143.08333333333334
+    },
+    "ops": {
+      "keygen": 620.0,
+      "sign": 367.0,
+      "verify": 255.0
+    }
+  },
+  {
+    "label": "YCSig-w8-k192-H>=k",
+    "regime": "H>=k",
+    "security_parameter": 192,
+    "hash_len": 288,
+    "max_g_value": 8,
+    "partition_size": 24,
+    "window_radius": 3,
+    "cycles": {
+      "keygen_mcycles": 2.81265033,
+      "sign_mcycles": 2.24029033,
+      "verify_mcycles": 1.66022092
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.0341033935546875
+    },
+    "signature": {
+      "sig_size_obj_cycles": 141.08333333333334,
+      "sig_size_obj_ops": 141.08333333333334
+    },
+    "ops": {
+      "keygen": 573.0,
+      "sign": 304.0,
+      "verify": 287.0
+    }
+  },
+  {
+    "label": "YCSig-w16-k192-H>=2k",
+    "regime": "H>=2k",
+    "security_parameter": 192,
+    "hash_len": 384,
+    "max_g_value": 16,
+    "partition_size": 12,
+    "window_radius": 3,
+    "cycles": {
+      "keygen_mcycles": 2.07262375,
+      "sign_mcycles": 1.4067596700000002,
+      "verify_mcycles": 1.5277475
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.03396892547607422
+    },
+    "signature": {
+      "sig_size_obj_cycles": 141.08333333333334,
+      "sig_size_obj_ops": 141.08333333333334
+    },
+    "ops": {
+      "keygen": 573.0,
+      "sign": 289.0,
+      "verify": 289.0
+    }
+  },
+  {
+    "label": "YCSig-w16-k192-H>=k",
+    "regime": "H>=k",
+    "security_parameter": 192,
+    "hash_len": 384,
+    "max_g_value": 16,
+    "partition_size": 12,
+    "window_radius": 3,
+    "cycles": {
+      "keygen_mcycles": 2.67464875,
+      "sign_mcycles": 1.78993724,
+      "verify_mcycles": 1.27835559
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.034148216247558594
+    },
+    "signature": {
+      "sig_size_obj_cycles": 152.08333333333334,
+      "sig_size_obj_ops": 152.08333333333334
+    },
+    "ops": {
+      "keygen": 573.0,
+      "sign": 298.0,
+      "verify": 286.0
+    }
+  },
+  {
+    "label": "YCSig-w32-k192-H>=2k",
+    "regime": "H>=2k",
+    "security_parameter": 192,
+    "hash_len": 385,
+    "max_g_value": 32,
+    "partition_size": 7,
+    "window_radius": 2,
+    "cycles": {
+      "keygen_mcycles": 2.30063592,
+      "sign_mcycles": 1.21960842,
+      "verify_mcycles": 1.47976
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.039703369140625
+    },
+    "signature": {
+      "sig_size_obj_cycles": 155.08333333333334,
+      "sig_size_obj_ops": 155.08333333333334
+    },
+    "ops": {
+      "keygen": 668.0,
+      "sign": 259.0,
+      "verify": 412.0
+    }
+  },
+  {
+    "label": "YCSig-w32-k192-H>=k",
+    "regime": "H>=k",
+    "security_parameter": 192,
+    "hash_len": 320,
+    "max_g_value": 32,
+    "partition_size": 7,
+    "window_radius": 2,
+    "cycles": {
+      "keygen_mcycles": 2.32128625,
+      "sign_mcycles": 1.13032375,
+      "verify_mcycles": 1.6045275
+    },
+    "benchmark": {
+      "cycle_backend": "estimated",
+      "cpu_frequency_ghz": 3.49
+    },
+    "memory": {
+      "peak_mib": 0.03979301452636719
+    },
+    "signature": {
+      "sig_size_obj_cycles": 137.08333333333334,
+      "sig_size_obj_ops": 137.08333333333334
+    },
+    "ops": {
+      "keygen": 668.0,
+      "sign": 225.0,
+      "verify": 449.0
+    }
+  }
+]

@@ -1,7 +1,12 @@
 import unittest
 
 from benchmark_ycsig import YCSigBenchmarkCase
-from benchmark_ycsig_cycles import _build_parser, run_cycle_benchmark_case
+from benchmark_ycsig_cycles import (
+    _build_parser,
+    deserialize_case_from_worker_json,
+    run_cycle_benchmark_case,
+    serialize_case_for_worker_json,
+)
 from benchmark_ycsig_table_cycles import run_paper_table_cycles
 from operation_counter import counting_scope, snapshot
 
@@ -79,7 +84,7 @@ class BenchmarkYCSigCyclesTests(unittest.TestCase):
         self.assertEqual(first["case"], "YCSig-w4-k128-H>=k")
         self.assertAlmostEqual(
             first["signature"]["signature_hash_equivalents_override"],
-            93.0,
+            93.295,
         )
 
     def test_cycle_benchmark_does_not_update_operation_counters(self) -> None:
@@ -103,6 +108,28 @@ class BenchmarkYCSigCyclesTests(unittest.TestCase):
             counters = snapshot()
 
         self.assertEqual(counters, {})
+
+    def test_worker_case_json_round_trip_preserves_bytes_setup_kwargs(self) -> None:
+        case = YCSigBenchmarkCase(
+            name="worker-json-roundtrip",
+            security_parameter=128,
+            hash_len=8,
+            max_g_bit=2,
+            partition_size=2,
+            window_radius=1,
+            samples=1,
+            random_seed=3,
+            setup_kwargs={
+                "ads_seed": b"ads/demo",
+                "salt_bytes": 2,
+            },
+        )
+
+        restored = deserialize_case_from_worker_json(
+            serialize_case_for_worker_json(case)
+        )
+
+        self.assertEqual(restored, case)
 
 
 if __name__ == "__main__":

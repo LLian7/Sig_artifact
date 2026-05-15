@@ -1,0 +1,128 @@
+[
+  {
+    "case_name": "case1",
+    "security_target": 128,
+    "max_g_value": 4,
+    "partition_num": 32,
+    "window_radius": 1,
+    "block_num": 73,
+    "hash_len": 146,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 2803.33159375,
+      "accept_check": 3073.1740312499996,
+      "full_accept": 16548.0749375,
+      "full_reject": 3397.3841249999996
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 160,
+    "max_g_value": 4,
+    "partition_num": 40,
+    "window_radius": 1,
+    "block_num": 91,
+    "hash_len": 182,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 2810.6715,
+      "accept_check": 3171.46115625,
+      "full_accept": 17478.56346875,
+      "full_reject": 3459.1135000000004
+    }
+  },
+  {
+    "case_name": "case1",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 48,
+    "window_radius": 1,
+    "block_num": 107,
+    "hash_len": 214,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 2785.2163124999997,
+      "accept_check": 3197.46165625,
+      "full_accept": 18568.0433125,
+      "full_reject": 3504.614375
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 128,
+    "max_g_value": 4,
+    "partition_num": 42,
+    "window_radius": 1,
+    "block_num": 133,
+    "hash_len": 266,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 2777.4401562499997,
+      "accept_check": 3135.1106250000003,
+      "full_accept": 17765.299687500003,
+      "full_reject": 3428.13975
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 160,
+    "max_g_value": 4,
+    "partition_num": 52,
+    "window_radius": 2,
+    "block_num": 162,
+    "hash_len": 324,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 2934.610125,
+      "accept_check": 3301.4527499999995,
+      "full_accept": 19113.268562499998,
+      "full_reject": 3578.864125
+    }
+  },
+  {
+    "case_name": "case2",
+    "security_target": 192,
+    "max_g_value": 4,
+    "partition_num": 62,
+    "window_radius": 2,
+    "block_num": 193,
+    "hash_len": 386,
+    "benchmark": {
+      "accepted_samples": 32,
+      "rejected_samples": 8,
+      "repetitions": 10,
+      "cpu_frequency_ghz": 3.49
+    },
+    "cycles": {
+      "profile_only": 3014.7274375,
+      "accept_check": 3370.90375,
+      "full_accept": 20993.1134375,
+      "full_reject": 3682.73525
+    }
+  }
+]

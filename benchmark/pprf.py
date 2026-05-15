@@ -152,6 +152,13 @@ class StoredSeed:
     seed: bytes
 
 
+def _new_stored_seed_unchecked(prefix: str, seed: bytes) -> StoredSeed:
+    stored_seed = object.__new__(StoredSeed)
+    object.__setattr__(stored_seed, "prefix", prefix)
+    object.__setattr__(stored_seed, "seed", seed)
+    return stored_seed
+
+
 @dataclass(frozen=True)
 class PPRFKey:
     """
@@ -226,14 +233,18 @@ def _expand_seed(
     cache: Optional[PPRFComputationCache] = None,
 ) -> Tuple[bytes, bytes]:
     if cache is not None:
-        cached = cache.expanded_children.get(seed)
+        expanded_children = cache.expanded_children
+        cached = expanded_children.get(seed)
         if cached is not None:
             return cached
+    else:
+        expanded_children = None
 
     counting = counters_enabled()
     if counting:
         increment("pprf.expand")
     backend = params._expand_fast_backend
+    seed_bytes = params._seed_bytes
     if backend is not None:
         if counting:
             increment("hash.backend_calls")
@@ -243,20 +254,20 @@ def _expand_seed(
             expanded = hash_object.digest(params._expand_output_bytes)
         else:
             expanded = hash_object.digest()[: params._expand_output_bytes]
-        left = expanded[: params.seed_bytes]
-        right = expanded[params.seed_bytes :]
+        left = expanded[:seed_bytes]
+        right = expanded[seed_bytes:]
     else:
         # Realize one GGM expansion as a single extendable-output draw and then
         # split the stream into the left/right child seeds.
         expanded = hash_bytes(
             params._expand_prefix + seed,
-            output_bits=2 * params.seed_bytes * 8,
+            output_bits=2 * seed_bytes * 8,
             hash_name=params.hash_name,
         )
-        left = truncate_to_bits(expanded[: params.seed_bytes], params.seed_bits)
-        right = truncate_to_bits(expanded[params.seed_bytes :], params.seed_bits)
-    if cache is not None:
-        cache.expanded_children[seed] = (left, right)
+        left = truncate_to_bits(expanded[:seed_bytes], params.seed_bits)
+        right = truncate_to_bits(expanded[seed_bytes:], params.seed_bits)
+    if expanded_children is not None:
+        expanded_children[seed] = (left, right)
     return left, right
 
 
@@ -393,7 +404,7 @@ def _derive_frontier_from_target_prefixes(
     if start >= end:
         return
     if targets[start] == prefix and start + 1 == end:
-        frontier.append(StoredSeed(prefix=prefix, seed=seed))
+        frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return
 
     split_index = len(prefix)
@@ -609,14 +620,14 @@ def _puncture_targets_from_seed(
     use_leaf_output: bool = True,
 ) -> None:
     if not holes:
-        frontier.append(StoredSeed(prefix=prefix, seed=seed))
+        frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return
 
     if len(prefix) == params.message_length:
         if prefix in holes:
             output_map[prefix] = _leaf_output(seed, params, cache) if use_leaf_output else seed
         else:
-            frontier.append(StoredSeed(prefix=prefix, seed=seed))
+            frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return
 
     split_index = len(prefix)
@@ -665,7 +676,7 @@ def _puncture_target_range_from_seed(
     use_leaf_output: bool = True,
 ) -> None:
     if start >= end:
-        frontier.append(StoredSeed(prefix=prefix, seed=seed))
+        frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return
 
     if len(prefix) == params.message_length:
@@ -718,7 +729,7 @@ def _puncture_target_range_from_seed_to_list(
     use_leaf_output: bool = True,
 ) -> None:
     if start >= end:
-        frontier.append(StoredSeed(prefix=prefix, seed=seed))
+        frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return
 
     if len(prefix) == params.message_length:
@@ -875,7 +886,7 @@ class GGBPPRF:
             pm_PPRF.domain_size,
         )
         if active_prefixes == ("",):
-            return _new_pprf_key_unchecked(pm_PPRF, (StoredSeed(prefix="", seed=root_seed),))
+            return _new_pprf_key_unchecked(pm_PPRF, (_new_stored_seed_unchecked("", root_seed),))
 
         frontier: List[StoredSeed] = []
         _derive_frontier_from_target_prefixes(
@@ -1078,11 +1089,11 @@ class GGBPPRF:
         for bit in x_bits[len(current_prefix) :]:
             left_seed, right_seed = _expand_seed(current_seed, k.params, cache)
             if bit == "0":
-                frontier.append(StoredSeed(prefix=current_prefix + "1", seed=right_seed))
+                frontier.append(_new_stored_seed_unchecked(current_prefix + "1", right_seed))
                 current_seed = left_seed
                 current_prefix += "0"
             else:
-                frontier.append(StoredSeed(prefix=current_prefix + "0", seed=left_seed))
+                frontier.append(_new_stored_seed_unchecked(current_prefix + "0", left_seed))
                 current_seed = right_seed
                 current_prefix += "1"
 
@@ -1388,7 +1399,7 @@ class GGBPPRF:
         for prefix, seed in zip(prefixes, stored_seeds):
             if len(seed) != pm_PPRF.seed_bytes:
                 raise ValueError("stored seed has incorrect byte length")
-            frontier.append(StoredSeed(prefix=prefix, seed=seed))
+            frontier.append(_new_stored_seed_unchecked(prefix, seed))
         return _new_pprf_key_unchecked(pm_PPRF, frontier)
 
     @staticmethod
