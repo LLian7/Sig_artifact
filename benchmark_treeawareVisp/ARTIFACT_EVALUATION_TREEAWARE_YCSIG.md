@@ -2,7 +2,9 @@
 
 This document explains how to validate and benchmark the TreeAwareISP + YCSig
 artifact in this directory. It is intentionally benchmark-facing: the commands
-below produce text or JSON outputs and do not generate paper `.tex` files.
+below produce text or JSON outputs and do not generate paper `.tex` files. The
+paper-section `.tex` snapshots and their VISPT subsection generator are not part
+of this artifact.
 
 ## Scope
 
@@ -25,6 +27,10 @@ The relevant implementation files are:
 - `treeaware_ycsig_bench_config.json`: TreeAwareISP + YCSig case list.
 - `ycsig_table_bench_config.json`: baseline YCSig table case list.
 
+This artifact intentionally has no checked-in `.tex` outputs. If paper tables
+or prose snippets are needed, generate them in the paper repository from JSON
+outputs rather than adding LaTeX snapshots back into this benchmark directory.
+
 ## Environment
 
 Run commands from this directory:
@@ -38,16 +44,28 @@ benchmarks use the Python standard library. Cycle numbers are machine-dependent
 and should be treated as local performance measurements; pass the local CPU
 frequency explicitly when reporting cycle-equivalent numbers.
 
-## Correctness Smoke Tests
+## Artifact Smoke Tests
 
-Run the TreeAwareISP and YCSig unit tests:
+Run the core tests used by this benchmark-facing artifact:
 
 ```bash
-python3 -m unittest test_treeaware_isp.py test_yc_sig.py
+python3 -m unittest \
+  test_yc_sig.py \
+  test_benchmark_ycsig.py \
+  test_benchmark_ycsig_table.py \
+  test_benchmark_ycsig_table_dual.py \
+  test_benchmark_ycsig_ops.py \
+  test_benchmark_ycsig_cycles.py \
+  test_operation_counter.py \
+  test_merkle_tree.py \
+  test_pprf.py
 ```
 
-This checks the TreeAwareISP sampler, YCSig signing and verification, and the
-tree-aware complement-signing behavior used by the benchmark rows.
+This checks YCSig signing and verification, Merkle/PPRF primitives, operation
+counting, and the benchmark-table entry points used for artifact evaluation.
+Developer-facing TreeAwareISP/search consistency tests remain in the directory,
+but they encode internal experimental routing/search assumptions and are not the
+artifact smoke-test path.
 
 ## TreeAwareISP Sampler Smoke Test
 
@@ -121,9 +139,9 @@ python3 benchmark_ycsig_table_cycles.py --samples 32 --repetitions 10 --cpu-freq
 python3 benchmark_ycsig_table_dual.py --samples 32 --repetitions 10 --mode both --cpu-frequency-ghz 3.49 --format text
 ```
 
-Use `--format json` when collecting data for scripts. Avoid `--format latex` in
-this artifact directory unless a separate paper-generation step is explicitly
-needed.
+Use `--format json` when collecting data for scripts. For artifact evaluation,
+prefer `--format text` for inspection and `--format json` for archival results;
+do not add generated `.tex` files to this benchmark directory.
 
 ## Single-Case Benchmarks
 

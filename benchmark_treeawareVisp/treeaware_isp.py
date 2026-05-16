@@ -3311,13 +3311,13 @@ def _route_full_support(
     xof_seed_material: Optional[bytes],
 ) -> Groups:
     return _ind_route(
-        partition_value,
-        counts,
-        counts,
-        params.partition_num,
-        params,
-        rng,
-        xof_seed_material,
+        partition_value=partition_value,
+        counts=counts,
+        residual_vec=counts,
+        residual_rows=params.partition_num,
+        params=params,
+        rng=rng,
+        xof_seed_material=xof_seed_material,
     )
 
 
@@ -3338,7 +3338,7 @@ def _route_size(
         rank = rng.randrange(support)
     else:
         seed_material = _route_seed_material(
-            b"vispt-size",
+            b"TISP.prof",
             partition_value,
             counts,
             params,
